@@ -1,0 +1,262 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Aug  6 09:51:25 2020
+
+@author: nicol
+"""
+
+import random
+import matplotlib.pyplot as plt
+from operator import attrgetter
+import time
+import pandas as pd
+
+
+#%%###########################################################################
+##  SETUP THE PERSON CLASS
+##############################################################################
+
+
+# MAKE THE PERSON CLASS
+class person:
+
+    # Define attributes of the person
+    #def __init__(self):
+    
+    # Set what to print when somebody asks about this object
+    #def __str__(self):
+        #return f"id: {self.id}\n age: {self.age}\n sex: {self.sex}\n location: {self.location}\n compartment:   {self.compartment}\n"
+
+    # Instance method (a function which can be run)
+    #def description(self):
+        #return f"Person {self.id} is a {self.age} year old {self.sex} located in {self.location}"
+    
+    # Define the probability of the person causing a new infection
+    def transmission_probability(self):
+        return 0.8
+    
+    # Define method for calculating the duration of infection
+    def duration_infectious(self):
+        return random.expovariate(1/14)
+    
+    # Define method for calculating the duration of immunity
+    def duration_removed(self):
+        return random.expovariate(1/5)
+    
+    # Define methods for calculating the duration of a partnership
+    def duration_partnership(self):
+        return random.expovariate(1/60)
+    
+    # Define probability of getting partnered up
+    def partnership_probability(self):
+        return 0.2
+
+
+#%%###########################################################################
+##  INITILISE A LIST OF PEOPLE
+##############################################################################
+
+# Initilise population metadata
+n_people = 100
+people = []
+meta = pd.DataFrame(index = range(0, n_people), 
+                    columns = ["age", 
+                               "sex", 
+                               "location",
+                               "state",
+                               "state_t0",
+                               "state_dt",
+                               "state_t1",
+                               "partner",
+                               "partner_t0",
+                               "partner_dt",
+                               "partner_t1",
+                               "methods"])
+
+# Fill in metadata matrix
+for i in range(0, n_people):
+    
+    # Basic demography
+    meta.at[i, "age"] = random.uniform(0, 100)
+    meta.at[i, "sex"] = int(random.random() > 0.5)
+    meta.at[i, "location"] = 1
+    meta.at[i, "methods"] = person()
+    
+    # Infection status
+    if random.random() > 0.1:
+        meta.at[i, "state"] = "S"
+    else:
+        meta.at[i, "state"] = "I"
+        meta.at[i, "state_dt"] = meta.at[i, "methods"].duration_infectious()
+        meta.at[i, "state_t0"] = 0
+        meta.at[i, "state_t1"] = 0 + meta.at[i, "state_dt"]
+
+
+#%%###########################################################################
+##  INITILISE PARTNERSHIPS
+##############################################################################
+
+# Set initial proportion coupled
+prop_partner = 0.1
+
+# Initilise trackers
+single = list(range(0, n_people))
+partners = []
+
+# Sample some people to partner up
+to_partner = []
+for i in range(0, round(0.5*prop_partner*n_people)):
+    to_partner.append(random.choice(single))
+    single.remove(to_partner[i])
+
+
+# Find their partners
+for i in to_partner:
+    
+    # Update agent i
+    people[i].partner = random.choice(single)
+    people[i].partner_expire = people[i].duration_partnership()
+    
+    # Update agent j
+    j = people[i].partner
+    people[people[i].partner].partner = people[i].id
+    people[people[i].partner].partner_expire = people[i].partner_expire
+    
+    # Update the list of single/partnered trackers
+    single.remove(people[i].partner)
+    partners.append(sorted([people[i].id, people[i].partner]))
+        
+
+
+#%%###########################################################################
+##  SIMULATE AN INFECTION PROCESS
+##############################################################################
+t = range(0, 100, 1)
+
+
+# Initilise infection status for everyone
+I = []
+for p in people:
+    if p.compartment == "I":
+        I.append(p.id)
+
+
+# Initilise S and R status for everyone else
+S = [p.id for p in people if p.id not in I]
+R = []
+
+
+# Iterate over each time point
+for t in t:
+    I_next = []
+    
+    # Iterate over every agent
+    for i in range(0, len(people)):
+        
+        # Break up a partnership
+        if people[i].partner != "none":
+            
+            # Split up expired partnerships
+            if people[i].partner_expire < t:
+                
+                # Update tracking vectors
+                single.append(people[i].id)
+                single.append(people[i].partner)
+                partners.remove(sorted([people[i].id, people[i].partner]))
+                
+                # Split them up
+                people[people[i].partner].partner = "none"
+                people[i].partner = "none"
+        
+        if people[i].partner == "none":
+            if random.random() < ((len(single)>2) * people[i].partnership_probability()):
+                
+                # Decide on a partner
+                single.remove(int(people[i].id))
+                partner = random.choice(single)
+                partner_expire = people[i].duration_partnership()
+                
+                # Partner up the agents
+                people[i].partner = partner
+                people[partner].partner = people[i].id
+                
+                # Set partnership duration
+                people[i].partner_expire = partner_expire
+                people[partner].partner_expire = partner_expire
+                
+                # Update the list of single/partnered people
+                single.remove(partner)
+                partners.append(sorted([people[i].id, partner]))
+                    
+        # Seed an infection if person is infectious and in a partnership with somebody susceptible
+        if people[i].compartment == "I":
+            if people[i].partner != "none":
+                if people[people[i].partner].compartment == "S":
+                    if random.random() < people[i].transmission_probability():
+                
+                        # Seed the infection
+                        I_new = people[i].partner
+                        people[I_new].compartment = "I"
+                        people[I_new].compartment_t0 = t
+                        people[I_new].compartment_dt = people[I_new].duration_infectious()
+                        
+                        # Update the compartment lists
+                        S.remove(I_new)
+                        I_next.append(I_new)
+            
+            
+            # Check to see if this person is no longer infectious
+            if t > (people[i].compartment_t0 + people[i].compartment_dt):
+                
+                # Update the persons compartment status
+                people[i].compartment = "R"
+                people[i].compartment_t0 = t
+                people[i].compartment_dt = people[i].duration_removed()
+                
+                # Update compartment lists
+                I.remove(people[i].id)
+                R.append(people[i].id)
+        
+        
+        # Determine if anybody is no longer immune
+        if people[i].compartment == "R":
+            if t > (people[i].compartment_t0 + people[i].compartment_dt):
+                
+                # Update the persons compartment status
+                people[i].compartment = "S"
+                people[i].compartment_t0 = t
+                people[i].compartment_dt = 0
+                
+                # Update compartment lists
+                R.remove(people[i].id)
+                S.append(people[i].id)
+        
+            
+    # Update list of infectious individuals
+    I = I + I_next
+
+        
+    # Update the plot  
+    #plt.scatter([t, t, t], [len(S), len(I), len(R)], c=["r", "g", "b"])
+    plt.scatter([t, t], [len(single), 2*len(partners)], c=["r", "g"])
+    
+    
+    
+                
+            
+
+
+
+
+
+
+#%%
+
+
+
+
+
+
+
+
+
