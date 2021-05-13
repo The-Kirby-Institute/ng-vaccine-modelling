@@ -10,7 +10,7 @@ Module to create a meta population in line with the GOANNA survey
 #%% Packages
 import pandas as pd
 import numpy as np
-import plotnine as pn
+# import plotnine as pn
 
 
 #%% Set constants
@@ -21,9 +21,16 @@ import plotnine as pn
 # Note that this data is only given by either gender or age group
 # rows = age group and columns = orientation
 # Orientation: 0=heterosexual, 1=homosexual, 2=bisexual
-orientation_by_age = np.array([[1156/1231, 30/1231, 45/1231],
-                               [792/881, 55/881, 34/881],
-                               [641/714, 42/714, 31/714]])
+# orientation_by_age = np.array([[1156/1231, 30/1231, 45/1231],
+#                                [792/881, 55/881, 34/881],
+#                                [641/714, 42/714, 31/714]])
+
+
+# Update for second GOANNA survey
+orientation_by_age = np.array([[418/469, 20/469, 31/469],
+                               [334/374, 18/374, 22/374],
+                               [239/283, 22/283, 22/283],
+                               [239/283, 22/283, 22/283]])
 orientation_by_age = np.cumsum(orientation_by_age, axis = 1)
 
 
@@ -31,9 +38,16 @@ orientation_by_age = np.cumsum(orientation_by_age, axis = 1)
 # Data from Table 5-1
 # Read as: age group (row) and number of sexual partners (column)
 # Number of partners state space: {0 (none), 1, (one), 2 (two-four), 3 (>=five)}
-partner_prob_raw = np.array([[78, 346, 367, 76],
-                             [55, 366, 292, 64],
-                             [58, 363, 210, 27]])
+# partner_prob_raw = np.array([[78, 346, 367, 76],
+#                              [55, 366, 292, 64],
+#                              [58, 363, 210, 27]])
+
+
+# Updated for second GOANNA survey
+partner_prob_raw = np.array([[13, 106, 112, 59],
+                             [22, 154, 114, 70],
+                             [17, 131, 71, 44],
+                             [17, 131, 71, 44]])
 partner_prob_raw = partner_prob_raw/partner_prob_raw.sum(axis=1, keepdims = True)
 
 
@@ -64,7 +78,7 @@ def goanna(n, burn_in):
     #
     # gender: 0=male, 1=female
     # age
-    # age_group: 0=(16-19), 1=(20-24), 2=(25-29)
+    # age_group: 0=(16-19), 1=(20-24), 2=(25-29), 3=(>29)
     # orientation: 0=hetero, 1=homo, 2=bi
     # risk: 0=low, 1=high
     # partner: -1=no partner, otherwise the index of their partner
@@ -117,7 +131,7 @@ def goanna(n, burn_in):
 
 
     # Age
-    meta.age = 16 + (29-16)*np.random.random(n)
+    meta.age = 16 + (35-16)*np.random.random(n)
 
 
     # Age-group
@@ -126,8 +140,10 @@ def goanna(n, burn_in):
             meta.at[i, "age_group"] = int(0)
         elif meta.at[i, "age"] <= 24:
             meta.at[i, "age_group"] = int(1)
-        else:
+        elif meta.at[i, "age"] <= 29:
             meta.at[i, "age_group"] = int(2)
+        else:
+            meta.at[i, "age_group"] = int(3)
 
 
     #%% Set Orientation
@@ -143,8 +159,8 @@ def goanna(n, burn_in):
 
 
         # Determine where each random number falls in the distribution
-        x.loc[x <= orientation_by_age[0, 0]] = 0
-        x.loc[x >= orientation_by_age[0, 1]] = 2
+        x.loc[x <= orientation_by_age[i, 0]] = 0
+        x.loc[x >= orientation_by_age[i, 1]] = 2
         x.loc[~np.isin(x, [0, 2])] = 1
 
 
@@ -160,6 +176,7 @@ def goanna(n, burn_in):
     meta.loc[(meta["age_group"] == 0) & (meta["risk"] < partner_prob_raw[0,3]), "risk"] = 1
     meta.loc[(meta["age_group"] == 1) & (meta["risk"] < partner_prob_raw[1,3]), "risk"] = 1
     meta.loc[(meta["age_group"] == 2) & (meta["risk"] < partner_prob_raw[2,3]), "risk"] = 1
+    meta.loc[(meta["age_group"] == 3) & (meta["risk"] < partner_prob_raw[3,3]), "risk"] = 1
     meta.loc[meta["risk"] != 1, "risk"] = 0
 
 
@@ -207,45 +224,45 @@ def goanna(n, burn_in):
 ##############################################################################
 
 
-def test_goanna(meta):
+# def test_goanna(meta):
     # MAKE SUMMARY GRAPHS OF THE GOANNA META POPULATION
 
 
     # Check distribution
-    groupings = meta.groupby(["gender", "age_group"])["age"].count().reset_index(name="count")
-    fig = (\
-        pn.ggplot(groupings, pn.aes(x="age_group", y="count", group="gender", fill="factor(gender)")) +\
-        pn.geom_col(position = "dodge") \
-        )
-    print(fig)
+    # groupings = meta.groupby(["gender", "age_group"])["age"].count().reset_index(name="count")
+    # fig = (\
+    #     pn.ggplot(groupings, pn.aes(x="age_group", y="count", group="gender", fill="factor(gender)")) +\
+    #     pn.geom_col(position = "dodge") \
+    #     )
+    # print(fig)
 
 
-    # Check on age distributions
-    groupings = meta.groupby(["gender", "age_group", "orientation"])["age"].count().reset_index(name="count")
-    fig = (\
-        pn.ggplot(groupings, pn.aes(x="age_group", y="count", fill="factor(orientation)")) +\
-        pn.geom_col(position = "stack") +\
-        pn.facet_wrap("gender")
-        )
-    print(fig)
+    # # Check on age distributions
+    # groupings = meta.groupby(["gender", "age_group", "orientation"])["age"].count().reset_index(name="count")
+    # fig = (\
+    #     pn.ggplot(groupings, pn.aes(x="age_group", y="count", fill="factor(orientation)")) +\
+    #     pn.geom_col(position = "stack") +\
+    #     pn.facet_wrap("gender")
+    #     )
+    # print(fig)
 
 
-    # Check risk distributions
-    groupings = meta.groupby(["age_group", "risk", "gender"])["age"].count().reset_index(name="count")
-    fig = (\
-        pn.ggplot(groupings, pn.aes(x="age_group", y="count", fill="factor(risk)")) +\
-        pn.geom_col(position = "stack") +\
-        pn.facet_wrap("gender")
-        )
-    print(fig)
+    # # Check risk distributions
+    # groupings = meta.groupby(["age_group", "risk", "gender"])["age"].count().reset_index(name="count")
+    # fig = (\
+    #     pn.ggplot(groupings, pn.aes(x="age_group", y="count", fill="factor(risk)")) +\
+    #     pn.geom_col(position = "stack") +\
+    #     pn.facet_wrap("gender")
+    #     )
+    # print(fig)
 
 
-    # Check infection numbers
-    groupings = meta.groupby(["age_group", "risk", "state"])["age"].count().reset_index(name="count")
-    fig = (\
-        pn.ggplot(groupings, pn.aes(x="age_group", y="count", fill="factor(state)")) +\
-        pn.geom_col(position = "stack") +\
-        pn.facet_wrap("risk")
-        )
-    print(fig)
+    # # Check infection numbers
+    # groupings = meta.groupby(["age_group", "risk", "state"])["age"].count().reset_index(name="count")
+    # fig = (\
+    #     pn.ggplot(groupings, pn.aes(x="age_group", y="count", fill="factor(state)")) +\
+    #     pn.geom_col(position = "stack") +\
+    #     pn.facet_wrap("risk")
+    #     )
+    # print(fig)
 

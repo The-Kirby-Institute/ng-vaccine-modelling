@@ -39,3 +39,15 @@ vignettes/*.pdf
 
 ############ IGNORE PYTHON STUFF ####################
 .idea
+.spyproject
+.pylint.d
+__pycache__
+*/__pycache__
+tmp*
+
+
+############ IGNORE SOME DIRECTORIES  ################
+simulations
+graphs
+documents
+data/2016_*

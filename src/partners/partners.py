@@ -9,94 +9,189 @@ INDEX
 
 """
 
-#%% IMPORT REQUIRED MODULES
+#%% SETUP Load Libraries
 import numpy as np
+import pandas as pd
 
 
-#%% SET REQUIRED VARIABLES
+#%% SETUP Read in Data
 
 
+# Setup distribution for the age-group to age-group preferences
+#
+#
 # Probability matrix of age biasing of last sexual encounter
 # Data from Table 5-3 of the GOANNA study - characteristics of last sexual encounter
 # Read as: from (row) to (column)
-# State space: {<16, 16-19, 20-24, 25-29, >29}
-# Note that the <16 and >30 demographics are excluded as they aren't in the model
+# State space: {16-19, 20-24, 25-29, >29}
+# Note that the <16 demographics are excluded as they aren't in the model
 # The rows only correspond to the 16-19, 20-24, 25-29 age groups
-bias_age = np.array(
-        [[578, 130, 11],
-        [127, 487, 61],
-        [27, 243, 174]],
-        dtype = "float")
-bias_age = bias_age/bias_age.sum(axis=1, keepdims = True)
+# bias_age = np.array([[578, 130, 11],
+#                      [127, 487, 61],
+#                      [27, 243, 174],
+#                      [27, 243, 174]],
+#         dtype = "float")
+#
+#
+# Update for latest GOANNA survey (Table 5.5)
+# bias_age = np.array([[221, 71, 7, 7],
+#                      [50, 208, 105, 105],
+#                      [9, 58, 198, 198],
+#                      [9, 58, 198, 198]],
+#         dtype = "float")
+# bias_age = bias_age/bias_age.sum(axis=1, keepdims = True)
 # bias_age = np.cumsum(bias_age, axis = 1)
+#
+#
+# Read in distribution as csv
+bias_age = pd.read_csv('data/age_partnership_distribution.csv')
 
 
+# Setup distribution for the sex to age-group preferences
+#
+#
 # Probability distribution of sex age bias for last sexual encounter
 # Data from Table 5-3 as above
 # State space {0 (male), 1 (female)}
 # Read as: from (row) to (column)
-bias_sex = np.array([[379, 313, 76],
-                    [346, 546, 170]])
-bias_sex = bias_sex/bias_sex.sum(axis=1, keepdims = True)
+# bias_sex = np.array([[379, 313, 76, 76],
+#                     [346, 546, 170, 170]])
+#
+#
+# Update for latest GOANNA Survey (Table 5.4)
+# bias_sex = np.array([[136, 132, 98, 98],
+#                      [155, 229, 254, 254]])
+# bias_sex = bias_sex/bias_sex.sum(axis=1, keepdims = True)
+#
+#
+# This has been turned off
 
 
+# Probabilities of partnering with another high-risk individual
+#
+#
 # Probability distribution of taking a high-risk partner by risk-group
 # Probabilties are made up
 # Columns: 0 (low-risk), 1(high-risk)
 # Row: the probability of taking a high-risk partner
-p_risky = np.array([0.05, 0.9])
+# p_risky = np.array([0.05, 0.9])
+#
+#
+p_risky = pd.read_csv('data/probability_high_risk_partner.csv')
 
 
+# Probabilities of cheating
+#
+#
 # Probability distribution of cheating by risk group
 # Probabilities are made up
 # Columns: 0 (low-risk), 1 (high risk)
 # Row: the probability of cheating on a long-term partner
-p_cheat = np.array([0.05, 0.5])
+# p_cheat = np.array([0.05, 0.5])
+#
+#
+p_cheat = pd.read_csv('data/probability_cheat.csv')
 
 
+# Probabilities of entering a long-term relationship by age group
+#
+#
 # Probability distribution of nature of sexual partnerships
 # Data from Table 5-3 as above
 # Read as: age group (row) and relationship (column)
 # Relationship state space: {0 (long term), 1 (short term)}
-bias_relationship = np.array([[526, 264],
-                              [490, 234],
-                              [449, 150]])
-bias_relationship = bias_relationship/bias_relationship.sum(axis=1, keepdims = True)
+# bias_relationship = np.array([[526, 264],
+#                               [490, 234],
+#                               [449, 150]])
+#
+#
+# Updated for new GOANNA survey (Table 5.5)
+# bias_relationship = np.array([[129, 174],
+#                               [173, 187],
+#                               [157, 109],
+#                               [157, 109]])
+# bias_relationship = bias_relationship/bias_relationship.sum(axis=1, keepdims = True)
+#
+#
+bias_relationship = pd.read_csv('data/probability_relationship.csv')
 
 
+# Scaling of the probability of a long term relationship
+#
+#
 # The probability of a long-term relationship by relationship risk-group
 # The relationship risk-group defined as follows
 #    0 = 0 x high-risk | 2 x low-risk
 #    1 = 1 x high-risk | 1 x low-risk
 #    2 = 2 x high-risk | 0 x low-risk
 # Column: relationship risk-group
-aversion = [1, 0.4, 0.05]
+# aversion = [1, 0.4, 0.05]
+#
+#
+aversion = pd.read_csv('data/scaling_long_term_by_risk_group.csv')
 
 
+# Partnership formation rates
+#
+#
 # Probability of forming a new partnership
 # Adjusted to agree with the GOANNA survey data
 # Row: risk level, column: age-group
-scaling = np.array([0.9, 0.4, 1.4])
-p_new_partner = np.array([(2/2) * (1/365) * scaling,
-                          (50/2) * (1/365) * np.array([1, 1.1, 1])])
+#
+#
+# p_new_partner = np.array([(2/2) * (1/365) * np.array([1, 1, 0.9, 0.9]),
+#                           (50/2) * (1/365) * np.array([1.1, 1.1, 1, 1])])
+#
+#
+partner_rates = pd.read_csv('data/partnership_rates.csv')
+p_new_partner = pd.read_csv('data/partnership_rates_scaling.csv')
+p_new_partner = (1/365) * p_new_partner
+p_new_partner.loc[0, :] = partner_rates.low[0] * p_new_partner.loc[0, :]
+p_new_partner.loc[1, :] = partner_rates.high[0] * p_new_partner.loc[1, :]
 
 
+# Partnership duration parameters
+#
+#
 # Parameters of sample distribution for long-term relationships
 # Note that this is a Gamma distribution with seperate parameters for
 # each relationship risk-group
 # Row: parameter, column: relationship risk-group (see above)
-duration_params = {"long": np.array([[365/100, 6*30/10, 2*30/10],
-                                     [100, 10, 10]]),
-                   "short": 14}
+# duration_params = {"long": np.array([[365/100, 2*30/10, 2*30/10, 2*30/10],
+#                                      [100, 10, 10, 10]]),
+#                    "short": 14}
+#
+#
+partner_durations = pd.read_csv('data/partnership_durations.csv')
+duration_params = {'long': np.array([4 * [partner_durations.long_mean[0]/partner_durations.long_var[0]],
+                                     4 * [partner_durations.long_var[0]]]),
+                   'short': partner_durations.short[0]}
 
 
+#%% FUN update_partnerships()
+#
+#
+# Function to update all partnership dynamics in the model
+#
+#
+def update_partnerships(meta, partner_matrix, partner_expire, t):
 
 
+    # Update partnership network
+    meta, partner_matrix, partner_expire, _, _, _, _ = new_partnership(meta, partner_matrix, partner_expire, t)
 
 
-#%%###########################################################################
-##                     FUNCTION FOR MAKING PARTNERSHIPS                     ##
-##############################################################################
+    # Remove expired partnerships
+    meta, partner_matrix, partner_expire = old_partnerships(meta, partner_matrix, partner_expire, t)
+
+
+    return meta, partner_matrix, partner_expire
+
+
+#%% FUN find_partner()
+#
+# FUNCTION FOR MAKING PARTNERSHIPS
+#
 # FIND A SEXUAL PARTNER FOR PERSON i FROM THE POOL OF ELIGABLE SINGLES IN meta
 #
 #
@@ -107,7 +202,7 @@ duration_params = {"long": np.array([[365/100, 6*30/10, 2*30/10],
 #       partnering with.
 #
 #   2. The population is put into three groups based on age:
-#       16-19, 20-24 and 25-29.
+#       16-19, 20-24, 25-29 and > 29.
 #
 #   3. Using data from the GOANNA study, the age-preferences of the bachelor
 #       are identified based on their age group. This distribution is then
@@ -175,7 +270,7 @@ def find_partner(meta, partner_matrix, bachelor_index):
 
 
         # Pull out age biasing distribution
-        partner_dist = bias_age[int(bachelor["age_group"]),] * bias_sex[int(bachelor["gender"])]
+        partner_dist = bias_age.iloc[int(bachelor["age_group"]),] #* bias_sex[int(bachelor["gender"])]
 
 
         # Check that there's a parter from each age group available
@@ -209,7 +304,7 @@ def find_partner(meta, partner_matrix, bachelor_index):
 
 
             # Decide which risk-group to partner with
-            if np.random.random(1) < p_risky[int(bachelor["risk"])]:
+            if np.random.random(1) < p_risky.iloc[0, int(bachelor["risk"])]:
 
                 # High-risk
                 partners = partners[partners["risk"] == 1]
@@ -226,7 +321,7 @@ def find_partner(meta, partner_matrix, bachelor_index):
 
 
             # Decide whether or not to cheat
-            if np.random.random(1) < p_cheat[int(bachelor["risk"])]:
+            if np.random.random(1) < p_cheat.iloc[0, int(bachelor["risk"])]:
 
                 # Cheating
                 partners = partners[partners["partner"] != -1]
@@ -258,9 +353,10 @@ def find_partner(meta, partner_matrix, bachelor_index):
 
 
 
-#%%###########################################################################
-##             FUNCTION FOR DECIDING ON THE TYPE OF RELATIONSHIP            ##
-##############################################################################
+#%% FUN choose_relationship()
+#
+# FUNCTION FOR DECIDING ON THE TYPE OF RELATIONSHIP
+#
 # DECIDE ON THE RELATIONSHIP (CASUAL vs LONG TERM) BETWEEN TWO INDIVIDUALS
 #
 #
@@ -311,9 +407,9 @@ def choose_relationship(meta, i, j):
 
         # Decide if relationship is long term or short term
         risk_group = meta.at[i, "risk"] + meta.at[j, "risk"]
-        p_relationship = bias_relationship[int(meta.at[i, "age_group"]), :]
+        p_relationship = bias_relationship.iloc[int(meta.at[i, "age_group"]), :]
         p_relationship = np.cumsum(p_relationship)
-        p_relationship[0] = aversion[int(risk_group)] * p_relationship[0]
+        p_relationship[0] = aversion.iloc[0, int(risk_group)] * p_relationship[0]
 
 
         # Now decide on a relationship type at random
@@ -325,9 +421,10 @@ def choose_relationship(meta, i, j):
     return relationship
 
 
-#%%###########################################################################
-##     FUNCTION FOR DECIDING THE PROBABILITY OF FORMING A RELATIONSHIP      ##
-##############################################################################
+#%% FUN prob_partnership()
+#
+# FUNCTION FOR DECIDING THE PROBABILITY OF FORMING A RELATIONSHIP
+#
 # THE PER-DAY PROBABILITY OF AN INDIVIDUAL FORMING ANY KIND OF RELATIONSHIP
 #
 #
@@ -367,17 +464,18 @@ def prob_partnership(meta, i):
 
     # Probability of making a new partnership
     p_partner_it = ( int(meta.at[i, "partner"] == -1) \
-                     + int(meta.at[i, "partner"] != -1) * p_cheat[int(meta.at[i, "risk"])] ) \
-                    * p_new_partner[int(meta.at[i, "risk"]), int(meta.at[i, "age_group"])]
+                    + int(meta.at[i, "partner"] != -1) * p_cheat.iloc[0, int(meta.at[i, "risk"])] ) \
+                    * p_new_partner.iloc[int(meta.at[i, "risk"]), int(meta.at[i, "age_group"])]
 
 
     # Return the partnership formation probability
     return p_partner_it
 
 
-#%%###########################################################################
-##             FUNCTION FOR SAMPLING RELATIONSHIP DURATION                  ##
-##############################################################################
+#%% FUN relationship_duration()
+#
+# FUNCTION FOR SAMPLING RELATIONSHIP DURATION
+#
 # SAMPLE THE DURATION OF A PARTNERSHIP
 #
 #
@@ -413,9 +511,10 @@ def relationship_duration(meta, i, j, is_short):
 
 
 
-#%%###########################################################################
-##  FUNCTION FOR MAKING NEW PARTNERSHIPS
-##############################################################################
+#%% FUN new_partnership()
+#
+# FUNCTION FOR MAKING NEW PARTNERSHIPS
+#
 # CREATE A NEW RELATIONSHIP FOR A GIVEN PERSON
 #
 #
@@ -437,17 +536,18 @@ def relationship_duration(meta, i, j, is_short):
 #
 # OUTPUT
 #   meta, partner_matrix, partner_expire
-def new_partnership(meta, partner_matrix, partner_expire, n, t):
+def new_partnership(meta, partner_matrix, partner_expire, t):
 
 
     # Initilise a couple of summary statistics of duration for if you want them
     d0t = []
     d1t = []
     d2t = []
+    d3t = []
 
 
     # Iterate over all people
-    for i in range(0, n):
+    for i in range(0, len(meta)):
 
 
         # Determine if this individual will look for a new partner on this iteration
@@ -492,8 +592,8 @@ def new_partnership(meta, partner_matrix, partner_expire, n, t):
 
 
                 # Update partner counter
-                meta.at[i, "counter"] = meta.at[i, "counter"] + 1
-                meta.at[j, "counter"] = meta.at[j, "counter"] + 1
+                # meta.at[i, "counter"] = meta.at[i, "counter"] + 1
+                # meta.at[j, "counter"] = meta.at[j, "counter"] + 1
 
 
                 # Update partnership duration matrix
@@ -502,23 +602,26 @@ def new_partnership(meta, partner_matrix, partner_expire, n, t):
                 partner_expire[j, i] = t + duration
 
 
-                # Update summary statistics, if you want them
-                if meta.at[i, "age_group"] == 0:
-                    d0t.append(duration)
-                elif meta.at[i, "age_group"] == 1:
-                    d1t.append(duration)
-                else:
-                    d2t.append(duration)
+                # # Update summary statistics, if you want them
+                # if meta.at[i, "age_group"] == 0:
+                #     d0t.append(duration)
+                # elif meta.at[i, "age_group"] == 1:
+                #     d1t.append(duration)
+                # elif meta.at[i, "age_group"] == 2:
+                #     d2t.append(duration)
+                # else:
+                #     d3t.append(duration)
 
 
     # Results
-    return meta, partner_matrix, partner_expire, d0t, d1t, d2t
+    return meta, partner_matrix, partner_expire, d0t, d1t, d2t, d3t
 
 
 
-#%%###########################################################################
-##                  FUNCTION FOR REMOVING OLD PARTNERSHIPS                  ##
-##############################################################################
+#%% FUN old_partnerships()
+#
+# FUNCTION FOR REMOVING OLD PARTNERSHIPS
+#
 # REMOVE EXPIRED RELATIONSHIPS FROM THE POPULATION
 #
 #
@@ -554,4 +657,5 @@ def old_partnerships(meta, partner_matrix, partner_expire, t):
 
     # Return output
     return meta, partner_matrix, partner_expire
+
 

@@ -1,34 +1,45 @@
 # -*- coding: utf-8 -*-
 """
+CODE FOR DOING ALL OF THE INFECTION STUFF
+
 Created on Thu Nov 12 13:00:07 2020
 
-Collection of functions for implementing infection dynamics in the remote
-communities model.
+@author: nicol
 """
 
 
-#%% IMPORT REQUIRED MODULES
+#%% Setup Libraries
 import numpy as np
+import pandas as pd
+import scipy.stats as sp
 
 
-#%% SET REQUIRED VARIABLES
+#%% FUN update_infections()
+#
+#
+# Function to update the state of infections
+#
+#
+def update_infections(inf_parameters, meta, partner_matrix, t):
 
 
-# Parameters for the duration of rectal infection
-mean_rectal = 14 # 360
-var_rectal = 35^2
-symptomatic_rectal = 0.8
+    # Implement a transmission event
+    meta = new_infections(inf_parameters, meta, partner_matrix, t)
 
 
-# parameters for the duration of urethral infection
-mean_urethral = 7 # 185
-var_urethral = 35^2
-symptomatic_urethral = [0.45, 0.11] # [male, female]
+    # Update infectious states
+    meta = progress_state_of_infection(meta, t)
 
 
-#%%###########################################################################
-##                   FUNCTIONS FOR INFECTION DURATION                       ##
-##############################################################################
+    # Implement treatment
+    meta = seek_treatment(inf_parameters, meta, partner_matrix, t)
+
+
+    return meta
+
+
+#%% FUN duration_rectal()
+##  FUNCTION FOR DURATION OF RECTAL INFECTIONS
 #
 #
 # Latent period
@@ -59,7 +70,7 @@ symptomatic_urethral = [0.45, 0.11] # [male, female]
 #    var_urethral
 #    symptomatic_urethral - 1x2 list, columns correspond to gender
 #
-#    mean_rectal
+#    mean_phar
 #    var_rectal
 #
 #
@@ -67,20 +78,18 @@ symptomatic_urethral = [0.45, 0.11] # [male, female]
 #    duration
 #
 #
-
-
-#########################
-##  RECTAL INFECTIONS  ##
-#########################
-def duration_rectal(infectee):
+def duration_rectal(inf_parameters, infectee):
 
 
     # Test for symptomatic of asymptomatic infection
-    if np.random.random() < symptomatic_rectal:
+    is_symptomatic = np.random.random() < inf_parameters['infection'].symptoms_rectal[infectee.gender]
+    if is_symptomatic.all():
 
 
         # Symptomatic
-        duration = np.random.gamma(mean_rectal/var_rectal, var_rectal)
+        duration = np.random.gamma(inf_parameters['infection'].mean_rectal[infectee.gender] / \
+                                   inf_parameters['infection'].var_rectal[infectee.gender], \
+                                   inf_parameters['infection'].var_rectal[infectee.gender])
 
 
     else:
@@ -94,18 +103,20 @@ def duration_rectal(infectee):
     return duration
 
 
-###########################
-##  URETHRAL INFECTIONS  ##
-###########################
-def duration_urethral(infectee):
+#%% FUN duration_urethral()
+def duration_urethral(inf_parameters, infectee):
 
 
     # Test for symptomatic of asymptomatic infection
-    if np.random.random() < symptomatic_urethral[int(infectee["gender"])]:
+    ii = int(infectee.gender)
+    is_symptomatic = np.random.random() < inf_parameters['infection'].symptoms_urethral.iloc[ii]
+    if is_symptomatic.all():
 
 
         # Symptomatic
-        duration = np.random.gamma(mean_urethral/var_urethral, var_urethral)
+        duration = np.random.gamma(inf_parameters['infection'].mean_urethral[ii] / \
+                                   inf_parameters['infection'].var_urethral[ii], \
+                                   inf_parameters['infection'].var_urethral[ii])
 
 
     else:
@@ -119,24 +130,54 @@ def duration_urethral(infectee):
     return duration
 
 
-#############################
-##  PHARYNGEAL INFECTIONS  ##
-#############################
-def duration_pharyngeal(infectee):
-    return float("inf")
+#%% FUN duration_pharyngeal()
+def duration_pharyngeal(inf_parameters, infectee):
 
 
-#####################
-##  LATENT PERIOD  ##
-#####################
-def latent_period():
-    return 4
+    # Test for symptomatic or asymptomatic infection
+    is_symptomatic = np.random.random() < inf_parameters['infection'].symptoms_pharyngeal[infectee.gender]
+    if is_symptomatic.any():
 
 
-#%%###########################################################################
-##                 FUNCTION FOR SEEDING NEW INFECTIONS                      ##
-##############################################################################
+        # Symptomatic
+        duration = np.random.gamma(inf_parameters['infection'].mean_pharyngeal[infectee.gender] / \
+                                   inf_parameters['infection'].var_pharyngeal[infectee.gender], \
+                                   inf_parameters['infection'].var_pharyngeal[infectee.gender])
+
+
+    else:
+
+
+        # Asymptomatic
+        duration = float("inf")
+
+
+    # Return duration
+    return duration
+
+
+#%% FUN latent_period()
+def latent_period(inf_parameters, infectee):
+
+
+    # Just using a constant latent period for now
+    out = inf_parameters['infection'].latent_period[infectee.gender]
+
+
+    return out
+
+
+#%% FUN new_infections()
 # LOOK AT ALL PARTNERSHIPS AND SEED NEW INFECTIONS
+#
+#
+# Uses matrices for describing the probability of engaging in certain acts as
+# a function of gender. In particular, p_anal, p_oral, p_kiss, p_rim, and p_sex.
+# In all cases, read entry (i, j) as the probability that an individual of
+# sex i (0=F, 1=M) engaging in that particular act with an individual of sex j.
+#
+#
+
 #
 #
 # Decision tree:
@@ -144,7 +185,7 @@ def latent_period():
 #    1. Find all individuals in the population who have at least 1 partner
 #        and are infections.
 #
-#    2. For a given person i, look at all their paartners j and check that:
+#    2. For a given person i, look at all their partners j and check that:
 #        a. Individual j is not immune
 #        b. Individual j is not infected at all 3 sites
 #
@@ -176,7 +217,9 @@ def latent_period():
 #   meta
 #
 #
-def new_infections(meta, partner_matrix, t, p_anal, p_oral, p_kiss, p_rim, p_sex, trans_anal, trans_oral, trans_kiss, trans_rim, trans_sex):
+def new_infections(inf_parameters, meta, partner_matrix, t):
+
+
     # Determine whether or not any new infections could possibly occur
     infectors = meta[(meta["state"] == "I") & (np.sum(partner_matrix, axis = 1) > 0)]
 
@@ -190,11 +233,11 @@ def new_infections(meta, partner_matrix, t, p_anal, p_oral, p_kiss, p_rim, p_sex
 
 
         # Remove partners who are either immune or already infected at all sites
-        partner_state = meta.loc[partners[0,:], "state"] != "R"
+        partner_susceptible = meta.loc[partners[0,:], "state"] != "R"
         partner_site = (meta.loc[partners[0,:], "site0"] == 1) & \
                        (meta.loc[partners[0,:], "site1"] == 1) & \
                        (meta.loc[partners[0,:], "site2"] == 1)
-        partners = partners[0, partner_state & (~partner_site)]
+        partners = partners[0, partner_susceptible & (~partner_site)]
 
 
         # Iterate over all partnerships with potential for transmission
@@ -210,11 +253,11 @@ def new_infections(meta, partner_matrix, t, p_anal, p_oral, p_kiss, p_rim, p_sex
 
             # Compose the transition probability matrix
             trans_prob = \
-                float(np.random.random(1) < risk * p_anal[g0, g1]) * trans_anal + \
-                float(np.random.random(1) < risk * p_oral[g0, g1]) * trans_oral + \
-                float(np.random.random(1) < risk * p_kiss[g0, g1]) * trans_kiss + \
-                float(np.random.random(1) < risk * p_rim[g0, g1]) * trans_rim + \
-                float(np.random.random(1) < risk * p_sex[g0, g1]) * trans_sex
+                float(np.random.random(1) < risk * inf_parameters['p_anal'][g0, g1]) * inf_parameters['trans_anal'] + \
+                float(np.random.random(1) < risk * inf_parameters['p_oral'][g0, g1]) * inf_parameters['trans_oral'] + \
+                float(np.random.random(1) < risk * inf_parameters['p_kiss'][g0, g1]) * inf_parameters['trans_kiss'] + \
+                float(np.random.random(1) < risk * inf_parameters['p_rim'][g0, g1]) * inf_parameters['trans_rim'] + \
+                float(np.random.random(1) < risk * inf_parameters['p_sex'][g0, g1]) * inf_parameters['trans_sex']
 
 
             # Determine if any transmissions have occured this iteration
@@ -243,25 +286,23 @@ def new_infections(meta, partner_matrix, t, p_anal, p_oral, p_kiss, p_rim, p_sex
 
 
                     # Set duration of latent period
-                    meta.at[j, "site" + str(int(k)) + "_t0"] = t + latent_period()
+                    meta.at[j, "site" + str(int(k)) + "_t0"] = t + latent_period(inf_parameters, infectee)
 
 
                     # Set site-specific duration of infection
                     if k == 0:
-                        meta.at[j, "site0_t1"] = t + duration_rectal(infectee)
+                        meta.at[j, "site0_t1"] = t + duration_rectal(inf_parameters, infectee)
                     elif k == 1:
-                        meta.at[j, "site1_t1"] = t + duration_urethral(infectee)
+                        meta.at[j, "site1_t1"] = t + duration_urethral(inf_parameters, infectee)
                     else:
-                        meta.at[j, "site2_t1"] = t + duration_pharyngeal(infectee)
+                        meta.at[j, "site2_t1"] = t + duration_pharyngeal(inf_parameters, infectee)
 
 
     # Return meta
     return meta
 
 
-#%%###########################################################################
-##                   PROGRESS THE STATE OF INFECTION                        ##
-##############################################################################
+#%% FUN progress_state_of_infection()
 # PROGRESS THE STATE OF INFECTION
 #
 #
@@ -319,8 +360,8 @@ def progress_state_of_infection(meta, t):
 
 
     # Make sure that everybody labelled I is still I
-    # Ptherwise, move them to S
-    removal = (meta["site0"]==0) & (meta["site1"]==0) & (meta["site2"]==0)
+    # Otherwise, move them to S
+    removal = (meta["site0"]==0) & (meta["site1"]==0) & (meta["site2"]==0) & (meta["state"]!="R")
     meta.at[removal, "state"] = "S"
 
 
@@ -331,3 +372,86 @@ def progress_state_of_infection(meta, t):
 
 
     return meta
+
+
+#%% FUN seek_treatment()
+# FUNCTION FOR TIME UNTIL TREATMENT
+#
+#
+# Time until treatment
+#    Gamma distributed with specified mean and variance.
+#    Upon treatment, the indivdual's parter will also be treated.
+#    Immunity is conferred for a specied period.
+#
+#
+# INPUT
+#    meta, t
+#
+#    Parameters of the distribution of time until an individual seeks treatment
+#    treat_mean
+#    treat_var
+#
+#    Parameters of the distribution of time for which an individual is immune
+#    immune_mean
+#    immune_var
+#
+#
+# OUTPUT
+#    meta
+#
+#
+def seek_treatment(parameters, meta, partner_matrix, t):
+
+
+    # Work out who is symptomatic
+    symp0 = np.isfinite(meta["site0_t0"]) & np.isfinite(meta["site0_t1"])
+    symp1 = np.isfinite(meta["site1_t0"]) & np.isfinite(meta["site1_t1"])
+    symp2 = np.isfinite(meta["site2_t0"]) & np.isfinite(meta["site2_t1"])
+
+
+    # Work out their duration of infectiousness
+    dur0 = t - meta.loc[symp0, "site0_t0"]
+    dur1 = t - meta.loc[symp1, "site1_t0"]
+    dur2 = t - meta.loc[symp2, "site2_t0"]
+
+
+    # Work out whose infectious period has exceeded their tolerance
+    treat0 = sp.gamma.cdf(dur0, parameters['infection'].treatment_mean[0]/parameters['infection'].treatment_var[0], parameters['infection'].treatment_var[0]) >= meta.loc[symp0, "treatment_threshold"]
+    treat1 = sp.gamma.cdf(dur1, parameters['infection'].treatment_mean[0]/parameters['infection'].treatment_var[0], parameters['infection'].treatment_var[0]) >= meta.loc[symp1, "treatment_threshold"]
+    treat2 = sp.gamma.cdf(dur2, parameters['infection'].treatment_mean[0]/parameters['infection'].treatment_var[0], parameters['infection'].treatment_var[0]) >= meta.loc[symp2, "treatment_threshold"]
+
+
+    # Pull out their identifiers
+    treat0 = treat0.index[treat0]
+    treat1 = treat1.index[treat1]
+    treat2 = treat2.index[treat2]
+
+
+    # Combine these into one big list
+    treat = np.append(treat0, treat1)
+    treat = np.append(treat, treat2)
+
+
+    # Look up their current partners
+    part = np.asarray(np.where(partner_matrix[treat,:] == 1))
+    treat = np.append(treat, part[1,:]).tolist()
+
+
+    # Make amendments to meta
+    meta.loc[treat, "state"] = "R"
+    meta.loc[treat, "recovery_time"] = t + np.random.gamma(parameters['infection'].immunity_mean[0]/parameters['infection'].immunity_var[0], parameters['infection'].immunity_var[0], len(treat))
+    meta.loc[treat, "site0"] = 0
+    meta.loc[treat, "site1"] = 0
+    meta.loc[treat, "site2"] = 0
+    meta.loc[treat, "site0_t0"] = float("inf")
+    meta.loc[treat, "site1_t0"] = float("inf")
+    meta.loc[treat, "site2_t0"] = float("inf")
+    meta.loc[treat, "site0_t1"] = float("inf")
+    meta.loc[treat, "site1_t1"] = float("inf")
+    meta.loc[treat, "site2_t1"] = float("inf")
+
+
+    # Return duration
+    return meta
+
+
