@@ -22,6 +22,7 @@ import pandas as pd
 # import feather
 # import matplotlib.pyplot as plt
 import tqdm as tqdm
+import matplotlib.pyplot as plt
 
 
 # For clearing out directories
@@ -52,6 +53,7 @@ param = pd.read_csv("data/param.csv")
 generate_populations = True
 burn_in_partnerships = True
 track_partnership_rates = True
+generate_parameters = False
 
 
 # Set whether or not you want to overwrite the existing data
@@ -181,6 +183,151 @@ if burn_in_partnerships:
                 # Graph Partnership dynamics
                 if track_partnership_rates:
                     pstat.graph_partnership_numbers(meta, n_days, p0ht, p0lt, p1ht, p1lt, p2ht, p2lt, p3ht, p3lt, save_dir)
+
+
+#%% RUN Generate parameters
+
+
+# Only run if asked to
+if generate_parameters == True:
+
+
+    # How many parameter sets to simulate
+    n_sim = param['n_parameter_sets'][0]
+
+
+    # Import probability
+    import_prob = np.random.beta(2, 40, n_sim)
+    # plt.hist(import_prob)
+
+
+    # Latent period
+    latent_period = np.round(14 * np.random.beta(2, 5, n_sim))
+    # plt.hist(latent_period)
+
+
+    # Duration of natural infection
+    mean_rectal = 30
+    var_rectal = 1
+    symptoms_rectal = np.random.random(n_sim)
+    mean_ural_male = 30
+    var_ural_male = 1
+    symptoms_ural_male = np.random.random(n_sim)
+    mean_ural_female = 30
+    var_ural_female = 1
+    symptoms_ural_female = np.random.random(n_sim)
+    mean_phar = 90
+    var_phar = 1
+    symptoms_phar = np.random.random(n_sim)
+
+
+    # Probabilities of transmission given a sexual event
+    pru = np.random.random(n_sim)
+    prp = np.random.random(n_sim)
+    pur = np.random.random(n_sim)
+    puu = np.random.random(n_sim)
+    pup = np.random.random(n_sim)
+    ppr = np.random.random(n_sim)
+    ppu = np.random.random(n_sim)
+    ppp = np.random.random(n_sim)
+
+
+    # Probabilities of engeging in different acts
+    p_kiss = np.random.random(n_sim)
+    p_oral_MF = np.random.random(n_sim)
+    p_oral_MM = np.random.random(n_sim)
+    p_oral_FF = np.random.random(n_sim)
+    p_oral_FM = np.random.random(n_sim)
+    p_sex_MF = np.random.random(n_sim)
+    p_sex_MM = np.random.random(n_sim)
+    p_sex_FF = np.random.random(n_sim)
+    p_anal_MF = np.random.random(n_sim)
+    p_anal_MM = np.random.random(n_sim)
+    p_rim = np.random.random(n_sim)
+
+
+    # Parameters regarding the likelihood of seeking treatment
+    treat_mean = np.round(8 * np.random.beta(10, 5, n_sim))
+    # plt.hist(treat_mean)
+    treat_var = 2.2
+
+
+    # Parameters around immunity from treatment
+    immune_mean	= np.round(14 * np.random.beta(10, 5, n_sim))
+    # plt.hist(immune_mean)
+    immune_var = 2
+
+
+    # Construct parameter set
+    sim_parameters = pd.DataFrame({
+                                    'import_prob': import_prob,
+                                    'latent_period': latent_period,
+                                    'mean_rectal': mean_rectal,
+                                    'var_rectal': var_rectal,
+                                    'symptoms_rectal': symptoms_rectal,
+                                    'mean_ural_male': mean_ural_male,
+                                    'var_ural_male': var_ural_male,
+                                    'symptoms_ural_male': symptoms_ural_male,
+                                    'mean_ural_female': mean_ural_female,
+                                    'var_ural_female': var_ural_female,
+                                    'symptoms_ural_female': symptoms_ural_female,
+                                    'mean_phar': mean_phar,
+                                    'var_phar': var_phar,
+                                    'symptoms_phar': symptoms_phar,
+                                    'pru': pru,
+                                    'prp': prp,
+                                    "pur": pur,
+                                    'puu': puu,
+                                    'pup': pup,
+                                    'ppr': ppr,
+                                    'ppu': ppu,
+                                    'ppp': ppp,
+                                    'p_kiss': p_kiss,
+                                    'p_oral_MF': p_oral_MF,
+                                    'p_oral_MM': p_oral_MM,
+                                    'p_oral_FF': p_oral_FF,
+                                    'p_oral_FM': p_oral_FM,
+                                    'p_sex_MF': p_sex_MF,
+                                    'p_sex_MM': p_sex_MM,
+                                    'p_sex_FF': p_sex_FF,
+                                    'p_anal_MF': p_anal_MF,
+                                    'p_anal_MM': p_anal_MM,
+                                    'p_rim': p_rim,
+                                    'treat_mean': treat_mean,
+                                    'treat_var': treat_var,
+                                    'immune_mean': immune_mean,
+                                    'immune_var': immune_var})
+
+
+    # Check to see if there is an old version lying around
+    current_version = 'simulations/parameters.csv'
+    if os.path.exists(current_version) == True:
+
+
+        # If so, rename the file
+        for v in range(0, 100):
+            old_version = 'simulations/parameters-old_version_' + str(v) + '.csv'
+            if os.path.exists(old_version) == False:
+                os.rename(current_version, old_version)
+                break
+
+
+    # Save the new version of the parameter set
+    sim_parameters.to_csv(current_version, index = False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

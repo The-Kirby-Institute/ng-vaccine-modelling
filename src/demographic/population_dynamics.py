@@ -38,6 +38,10 @@ def update_population(pop_parameters, inf_parameters, meta, partner_matrix, part
     meta, partner_matrix, partner_expire = leave_population(pop_parameters, meta, partner_matrix, partner_expire)
 
 
+    # Take peop-le out when they exceed 36
+    meta, partner_matrix, partner_expire = too_old(pop_parameters, meta, partner_matrix, partner_expire)
+
+
     # Make people older by a day
     meta.loc[:, 'age'] = meta.loc[:, 'age'] + (1/365)
     meta.loc[meta.age < 20, 'age_group'] = 0
@@ -59,10 +63,11 @@ def sexual_debut(pop_parameters, inf_parameters, meta, partner_matrix, partner_e
 
 
     # Simulate the number of new people to bring in
-    prop_female = pop_parameters['age_dist'].cdf.iloc[0] * (1 - pop_parameters['sex_dist'].pMale[0])
-    prop_male = pop_parameters['age_dist'].cdf.iloc[5] * pop_parameters['sex_dist'].pMale[0]
-    debut_rate = pop_parameters['n'] * (prop_female + prop_male) / 365
+    prop_female = pop_parameters['age_dist'].cdf.iloc[0] * (1 - pop_parameters['sex_dist'].pMale)
+    prop_male = pop_parameters['age_dist'].cdf.iloc[5] * pop_parameters['sex_dist'].pMale
+    debut_rate = pop_parameters['n'] * (prop_female + prop_male) / (4*365)
     n_debut = np.random.poisson(debut_rate)
+    n_debut = int(n_debut[0])
 
 
     # Bring some people in if needed
@@ -109,33 +114,85 @@ def sexual_debut(pop_parameters, inf_parameters, meta, partner_matrix, partner_e
 def leave_population(pop_parameters, meta, partner_matrix, partner_expire):
 
 
-    # People leave at the same rate as sexual debut to try and keep a constant pop size
-    prop_female = pop_parameters['age_dist'].cdf.iloc[0] * (1 - pop_parameters['sex_dist'].pMale[0])
-    prop_male = pop_parameters['age_dist'].cdf.iloc[5] * pop_parameters['sex_dist'].pMale[0]
-    debut_rate = pop_parameters['n'] * (prop_female + prop_male) / 365
-    n_leave = np.random.poisson(debut_rate)
+    # Compute target population for each age group
+    age_dist = pop_parameters['age_dist']
+    pMale = pop_parameters['sex_dist']['pMale'].iloc[0]
+    n = pop_parameters['n']
+    target = ( age_dist.ave[age_dist.sex == 0].reset_index(drop=True) * (1-pMale) + \
+               age_dist.ave[age_dist.sex == 1].reset_index(drop=True) * pMale ) * n
+    target = np.floor(target)
+
+
+    # Sample the leaving rate from the 20-24 age group
+    n_leave = np.random.poisson( max(0, sum(meta.age_group==1) - max(target[1:4])))
+    leave_1 = ([] if n_leave == 0 else np.random.choice(meta.index[meta.age_group == 1], n_leave).tolist())
+
+
+    # Sample the leaving rate from the 25-29 age group
+    n_leave = np.random.poisson( max(0, sum(meta.age_group==2) - max(target[2:4])))
+    leave_2 = ([] if n_leave == 0 else np.random.choice(meta.index[meta.age_group == 2], n_leave).tolist())
+
+
+    # Sample the leaving rate from the 30-34 age group
+    n_leave = np.random.poisson( max(0, sum((meta.age > 30) & (meta.age < 35)) - max(target[3:4])))
+    leave_3 = ([] if n_leave == 0 else np.random.choice(meta.index[(meta.age > 30) & (meta.age < 35)], n_leave).tolist())
+
+
+    # Sample the leaving rate from the 35 age group
+    n_leave = np.random.poisson( max(0, sum(meta.age > 35) - target[4]))
+    leave_4 = ([] if n_leave == 0 else np.random.choice(meta.index[meta.age > 35], n_leave).tolist())
+
+
+    # Combine everyone
+    leave = leave_1 + leave_2 + leave_3 + leave_4
 
 
     # Take some people out if needed
-    if n_leave > 0:
+    if len(leave) > 0:
 
 
-        # Pick people above age group 1 at random
-        to_leave = meta.index[meta.age_group>1]
-        if len(to_leave) > 0:
-            leave = np.random.choice(to_leave, n_leave)
+        # Terminate long term relationships with these guys
+        meta.loc[meta.partner.isin(leave), 'partner'] = -1
 
 
-            # Terminate long term relationships with these guys
-            meta.loc[meta.partner.isin(leave), 'partner'] = -1
+        # Take them out of the population
+        meta = meta.drop(leave, 0).reset_index(drop = True)
+        partner_matrix = np.delete(partner_matrix, leave, 0)
+        partner_matrix = np.delete(partner_matrix, leave, 1)
+        partner_expire = np.delete(partner_expire, leave, 0)
+        partner_expire = np.delete(partner_expire, leave, 1)
 
 
-            # Take them out of the population
-            meta = meta.drop(leave, 0).reset_index(drop = True)
-            partner_matrix = np.delete(partner_matrix, leave, 0)
-            partner_matrix = np.delete(partner_matrix, leave, 1)
-            partner_expire = np.delete(partner_expire, leave, 0)
-            partner_expire = np.delete(partner_expire, leave, 1)
+    return meta, partner_matrix, partner_expire
+
+
+#%% FUN too_old()
+#
+#
+# Somebody leaves the population
+#
+#
+def too_old(pop_parameters, meta, partner_matrix, partner_expire):
+
+
+    # People leave when they are older than 36
+    leave = meta.index[meta.age >= 36]
+
+
+    # Take some people out if needed
+    if len(leave) > 0:
+
+
+        # Terminate long term relationships with these guys
+        meta.loc[meta.partner.isin(leave), 'partner'] = -1
+
+
+        # Take them out of the population
+        meta = meta.drop(leave, 0).reset_index(drop = True)
+        partner_matrix = np.delete(partner_matrix, leave, 0)
+        partner_matrix = np.delete(partner_matrix, leave, 1)
+        partner_expire = np.delete(partner_expire, leave, 0)
+        partner_expire = np.delete(partner_expire, leave, 1)
 
 
     return meta, partner_matrix, partner_expire

@@ -27,6 +27,10 @@ scenario_global = sim_parameters.scenario[0]
 def setup_data(scenario = scenario_global):
 
 
+    # What doing
+    print('Parsing demographic attributes for scenario ' + str(scenario) + '.\n')
+
+
     # Load distribution of community size
     size = pd.read_csv("data/scenarios.csv")
     size = size.loc[size["scenario_num"] == scenario,]

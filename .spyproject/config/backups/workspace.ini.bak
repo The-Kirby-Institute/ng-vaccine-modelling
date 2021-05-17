@@ -8,5 +8,5 @@ recent_files = ['run_a_simulation.py', 'src\\partners\\partners.py', 'src\\infec
 
 [main]
 version = 0.2.0
-recent_files = ['run_a_simulation.py', 'src\\calibration\\setup.py', 'src\\demographic\\generate_population.py', 'src\\demographic\\population_dynamics.py', 'src\\partners\\partners.py', 'src\\infections\\ng.py']
+recent_files = ['driver_check_simulations.py', 'src\\demographic\\population_dynamics.py', 'src\\calibration\\setup.py']
 

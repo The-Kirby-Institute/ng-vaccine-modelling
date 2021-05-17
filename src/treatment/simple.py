@@ -78,8 +78,8 @@ def seek_treatment(parameters, meta, partner_matrix, t):
 
 
     # Look up their current partners
-    part = np.asarray(np.where(partner_matrix[treat,:] == 1))
-    treat = np.append(treat, part[1,:]).tolist()
+    # part = np.asarray(np.where(partner_matrix[treat,:] == 1))
+    # treat = np.append(treat, part[1,:]).tolist()
 
 
     # Make amendments to meta
