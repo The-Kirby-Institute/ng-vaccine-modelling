@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+#%%
+#  -*- coding: utf-8 -*-
 """
 Created on Mon May 17 09:33:12 2021
 
@@ -19,7 +20,7 @@ param = pd.read_csv('data/param.csv')
 
 #%%  Check Aggregate Infection Status
 
-scenario = 3
+scenario = 1
 sim = 0
 
 # Preallocate for infection process

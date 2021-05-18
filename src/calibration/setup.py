@@ -27,6 +27,9 @@ import src.calibration.setup as setup
 import src.infections.ng as ng
 
 
+run_mode = 'parallel'
+
+
 #%% FUN parse_population_data()
 #
 #
@@ -39,17 +42,24 @@ def parse_population_data(scenario = 'default', set = 0):
     # Work out if you need to read in the default set or not
     if scenario == 'default':
         # Read in the default set
-        print('Parsing default population dataset (scenario 1 and population 0).\n', flush = True)
+        ( print('Parsing default population dataset (scenario 1 and population 0).\n', flush = True) if run_mode == 'serial' else [] )
         scenario = 1
         set = 0
 
     else:
         # Read in a specific set
-        print('Parsing simulated population dataset ' + str(set) + '.\n', flush = True)
+        ( print('Parsing simulated population dataset ' + str(set) + '.\n', flush = True) if run_mode == 'serial' else [] )
 
 
     # Read in the population metadata dataframe
     meta = pd.read_feather('simulations/populations/scenario_' + str(scenario) + '/population_' + str(set) + '.ftr')
+
+
+    # Check that the duration exposed is correct in meta
+    sim_parameters = pd.read_csv('data/param.csv')
+    meta.loc[meta.site0 == 1, 'site0_t0'] = sim_parameters.partner_burn_in[0] + sim_parameters.init_duration_exposed[0] * np.random.random(sum(meta.site0 == 1))
+    meta.loc[meta.site1 == 1, 'site1_t0'] = sim_parameters.partner_burn_in[0] + sim_parameters.init_duration_exposed[0] * np.random.random(sum(meta.site1 == 1))
+    meta.loc[meta.site2 == 1, 'site2_t0'] = sim_parameters.partner_burn_in[0] + sim_parameters.init_duration_exposed[0] * np.random.random(sum(meta.site2 == 1))
 
 
     # Read in the simulated partnership data arrays
@@ -290,12 +300,12 @@ def parse_parameters(set = 'default'):
     # Work out if you need to read in the default set or not
     if set == 'default':
         # Read in the default set
-        print('Parsing default parameter set.\n')
+        ( print('Parsing default parameter set.\n') if run_mode == 'serial' else [] )
         parameters = parse_default_parameters()
 
     else:
         # Read in the numbered set
-        print('Parsing simulated parameter set ' + str(set) + '.\n')
+        ( print('Parsing simulated parameter set ' + str(set) + '.\n') if run_mode == 'serial' else [] )
         parameters = parse_custom_parameters(set)
 
 
@@ -307,7 +317,7 @@ def run_one_parameter_set(parameter_no):
 
 
     # Run first parameter set
-    print('\nRunning scenario 1 - with parameter set ' + str(parameter_no) + '\n===========================================')
+    ( print('\nRunning scenario 1 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
     run_one_simulation(1, parameter_no)
 
 
@@ -329,7 +339,7 @@ def run_one_simulation(scenario, parameter_no):
 
 
     # Read in simulation parameters
-    print('Parsing global simulation settings.\n')
+    ( print('Parsing global simulation settings.\n') if run_mode == 'serial' else [] )
     sim_parameters = pd.read_csv('data/param.csv')
 
 
@@ -342,7 +352,7 @@ def run_one_simulation(scenario, parameter_no):
     # Parse demographic parameters for population
     # Pass this function the scenario number
     # Will default back to scenario 0
-    pop_parameters = pop.setup_data(scenario)
+    pop_parameters = pop.setup_data(scenario, run_mode)
 
 
     # Parse simulated population
@@ -352,11 +362,15 @@ def run_one_simulation(scenario, parameter_no):
     meta, partner_expire, partner_matrix = setup.parse_population_data(scenario, population_no)
 
 
+    # Print update
+    ( print('Running parameter set: ' + str(parameter_no) + ' on scenario: ' + str(scenario) + ' with population: ' + str(population_no)) if run_mode == 'parallel' else [] )
+
+
     #% SETUP Output Directory
 
 
     # Clean out directory from any previous results
-    print('Purging simulation output directory.\n')
+    ( print('Purging simulation output directory.\n') if run_mode == 'serial' else [] )
     out_dir = 'simulations/output/scenario_' + str(scenario) +'/simulation_' + str(parameter_no)
     dirpath = Path(out_dir)
     if dirpath.exists() and dirpath.is_dir():
@@ -370,8 +384,9 @@ def run_one_simulation(scenario, parameter_no):
     #% RUN
 
 
-    print('Running simulation...\n')
-    for t in tqdm.tqdm(range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0])):
+    ( print('Running simulation...\n') if run_mode == 'serial' else [] )
+    # for t in tqdm.tqdm(range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0])):
+    for t in range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0]):
 
 
         # Update population
@@ -390,14 +405,14 @@ def run_one_simulation(scenario, parameter_no):
         meta.to_feather(out_dir + '/timestep' + str(t) + '.ftr')
 
 
-    print('\n\nSimulation complete!\n')
+    ( print('\n\nSimulation complete!\n') if run_mode == 'serial' else [] )
 
 
     #% SAVE OUTPUT
 
 
     # Shelve variables
-    print('Shelving environment variables.\n')
+    ( print('Shelving environment variables.\n') if run_mode == 'serial' else [] )
     my_shelf = shelve.open(out_dir + '_workspace.out', 'n')
     for key in dir():
         try:
@@ -406,6 +421,6 @@ def run_one_simulation(scenario, parameter_no):
             #
             # __builtins__, my_shelf, and imported modules can not be shelved.
             #
-            print('ERROR shelving: {0}'.format(key))
+            ( print('ERROR shelving: {0}'.format(key)) if run_mode == 'serial' else [] )
     my_shelf.close()
-    print('\nComplete!\n\n\n\n')
+    ( print('\nComplete!\n\n\n\n') if run_mode == 'serial' else [] )

@@ -24,11 +24,11 @@ scenario_global = sim_parameters.scenario[0]
 
 
 #%% FUN setup_data()
-def setup_data(scenario = scenario_global):
+def setup_data(scenario = scenario_global, run_mode = 'serial'):
 
 
     # What doing
-    print('Parsing demographic attributes for scenario ' + str(scenario) + '.\n')
+    ( print('Parsing demographic attributes for scenario ' + str(scenario) + '.\n') if run_mode == 'serial' else [] )
 
 
     # Load distribution of community size
