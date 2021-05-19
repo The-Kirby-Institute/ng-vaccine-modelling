@@ -17,6 +17,7 @@ import shelve
 from pathlib import Path
 import shutil
 import os
+import time
 
 
 # My modules
@@ -317,22 +318,26 @@ def run_one_parameter_set(parameter_no):
 
 
     # Run first parameter set
-    ( print('\nRunning scenario 1 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
-    run_one_simulation(1, parameter_no)
+    # ( print('\nRunning scenario 1 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
+    # run_one_simulation(1, parameter_no)
 
 
     # Run second parameter set
-    # print('\nRunning scenario 2 - with parameter set ' + str(parameter_no) + '\n===========================================')
-    # run_one_simulation(2, parameter_no)
+    # ( print('\nRunning scenario 2 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
+    run_one_simulation(2, parameter_no)
 
 
     # Run third parameter set
-    # print('\nRunning scenario 3 - with parameter set ' + str(parameter_no) + '\n===========================================')
+    # ( print('\nRunning scenario 3 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
     # run_one_simulation(3, parameter_no)
 
 
 #%% FUN run_one_simulation()
 def run_one_simulation(scenario, parameter_no):
+
+    
+    # Time code
+    t0 = time.time()
 
 
     # SETUP Simulation data
@@ -362,65 +367,72 @@ def run_one_simulation(scenario, parameter_no):
     meta, partner_expire, partner_matrix = setup.parse_population_data(scenario, population_no)
 
 
-    # Print update
-    ( print('Running parameter set: ' + str(parameter_no) + ' on scenario: ' + str(scenario) + ' with population: ' + str(population_no)) if run_mode == 'parallel' else [] )
-
-
-    #% SETUP Output Directory
-
-
-    # Clean out directory from any previous results
-    ( print('Purging simulation output directory.\n') if run_mode == 'serial' else [] )
+    # Check to see if this dataset has been run to completion
     out_dir = 'simulations/output/scenario_' + str(scenario) +'/simulation_' + str(parameter_no)
-    dirpath = Path(out_dir)
-    if dirpath.exists() and dirpath.is_dir():
-        shutil.rmtree(dirpath)
+    last_file = out_dir + '/timestep' + str(sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0] - 1) + '.ftr'
+    if os.path.exists(last_file) == False:
 
 
-    # Remake the directory
-    os.mkdir(dirpath)
+        #% SETUP Output Directory
 
 
-    #% RUN
+        # Clean out directory from any previous results
+        ( print('Purging simulation output directory.\n') if run_mode == 'serial' else [] )
+        dirpath = Path(out_dir)
+        if dirpath.exists() and dirpath.is_dir():
+            shutil.rmtree(dirpath)
 
 
-    ( print('Running simulation...\n') if run_mode == 'serial' else [] )
-    # for t in tqdm.tqdm(range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0])):
-    for t in range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0]):
+        # Remake the directory
+        os.mkdir(dirpath)
 
 
-        # Update population
-        meta, partner_matrix, partner_expire = demo.update_population(pop_parameters, inf_parameters, meta, partner_matrix, partner_expire, t)
+        #% RUN
 
 
-        # Update partnerships
-        meta, partner_matrix, partner_expire = prt.update_partnerships(meta, partner_matrix, partner_expire, t)
+        ( print('Running simulation...\n') if run_mode == 'serial' else [] )
+        # for t in tqdm.tqdm(range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0])):
+        for t in range(sim_parameters.partner_burn_in[0], sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0]):
 
 
-        # Update infections
-        meta = ng.update_infections(inf_parameters, meta, partner_matrix, t)
+            # Update population
+            meta, partner_matrix, partner_expire = demo.update_population(pop_parameters, inf_parameters, meta, partner_matrix, partner_expire, t)
 
 
-        # Dump simulation output
-        meta.to_feather(out_dir + '/timestep' + str(t) + '.ftr')
+            # Update partnerships
+            meta, partner_matrix, partner_expire = prt.update_partnerships(meta, partner_matrix, partner_expire, t)
 
 
-    ( print('\n\nSimulation complete!\n') if run_mode == 'serial' else [] )
+            # Update infections
+            meta = ng.update_infections(inf_parameters, meta, partner_matrix, t)
 
 
-    #% SAVE OUTPUT
+            # Dump simulation output
+            meta.to_feather(out_dir + '/timestep' + str(t) + '.ftr')
 
 
-    # Shelve variables
-    ( print('Shelving environment variables.\n') if run_mode == 'serial' else [] )
-    my_shelf = shelve.open(out_dir + '_workspace.out', 'n')
-    for key in dir():
-        try:
-            my_shelf[key] = globals()[key]
-        except:
-            #
-            # __builtins__, my_shelf, and imported modules can not be shelved.
-            #
-            ( print('ERROR shelving: {0}'.format(key)) if run_mode == 'serial' else [] )
-    my_shelf.close()
-    ( print('\nComplete!\n\n\n\n') if run_mode == 'serial' else [] )
+        ( print('\n\nSimulation complete!\n') if run_mode == 'serial' else [] )
+
+
+        #% SAVE OUTPUT
+
+
+        # Shelve variables
+        ( print('Shelving environment variables.\n') if run_mode == 'serial' else [] )
+        my_shelf = shelve.open(out_dir + '_workspace.out', 'n')
+        for key in dir():
+            try:
+                my_shelf[key] = globals()[key]
+            except:
+                #
+                # __builtins__, my_shelf, and imported modules can not be shelved.
+                #
+                ( print('ERROR shelving: {0}'.format(key)) if run_mode == 'serial' else [] )
+        my_shelf.close()
+        ( print('\nComplete!\n\n\n\n') if run_mode == 'serial' else [] )
+
+
+    # Print update
+    runtime = (time.time() - t0)/60
+    ( print('Running parameter set: ' + str(parameter_no) + ' on scenario: ' + str(scenario) + ' with population: ' + str(population_no) + ' - runtime: ' + str(runtime) + ' min') if run_mode == 'parallel' else [] )
+
