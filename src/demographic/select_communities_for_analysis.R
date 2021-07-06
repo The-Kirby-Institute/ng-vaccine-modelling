@@ -1,4 +1,6 @@
-source("../setup.R")
+library(tidyverse)
+library(sf)
+
 
 
 ################################
@@ -338,32 +340,47 @@ data =
 
 
 # Compute the distributions
-data = 
+means = 
   data %>%
   group_by(scenario, sex, age_lower, age_upper) %>%
-  summarise(ave = mean(weight)) %>%
+  summarise(count = median(count)) %>%
+  ungroup(age_lower) %>%
+  mutate(ave_smooth = rollapply(count, 4, mean, fill=NA, align='center'),
+         ave = count / sum(count)) %>%
   ungroup()
 
 
-# Make a plot
+# Check these distributions
 data %>%
-  mutate(ave = case_when(sex == "M" ~ -ave, T ~ ave)) %>%
-  ungroup() %>%
-  ggplot(aes(x = age_lower, y = ave, fill = sex)) +
-  geom_col() +
-  facet_wrap(~scenario)
+  ggplot(aes(x=age_lower, y=count)) +
+  geom_line(aes(group=ILOC_CODE)) +
+  stat_summary(aes(y = count), fun=mean, colour="red", geom="line", size=2) +
+  facet_grid(rows = vars(sex),
+             cols = vars(scenario),
+             scales = 'free')
 
 
 # Make a different plot
-data %>%
-  ggplot(aes(x=age_lower, y=ave, colour=sex)) +
-  geom_line() +
+means %>%
+  ggplot(aes(x=age_lower, colour=sex)) +
+  geom_line(aes(y=ave)) +
   facet_wrap(~scenario)
 
 
+# Save the smoothed version
+means = 
+  means %>%
+  select(-ave, -count) %>%
+  rename(ave = ave_smooth) %>%
+  filter(!is.na(ave)) %>%
+  group_by(scenario, sex) %>%
+  mutate(ave = ave / sum(ave)) %>%
+  ungroup()
+
+
 # Save for later
-saveRDS(data, "data/age_distributions.Rds")
-write.csv(data, "data/age_distributions.csv", row.names = F)
+saveRDS(means, "data/age_distributions.Rds")
+write.csv(means, "data/age_distributions.csv", row.names = F)
 
 
 ############################################

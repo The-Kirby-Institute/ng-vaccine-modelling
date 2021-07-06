@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import tqdm as tqdm
 import random
-import shelve
+import pickle
 from pathlib import Path
 import shutil
 import os
@@ -37,7 +37,7 @@ run_mode = 'parallel'
 # A function which loads in population data
 #
 #
-def parse_population_data(scenario = 'default', set = 0):
+def parse_population_data(scenario = 'default', set = 0, run_mode = run_mode):
 
 
     # Work out if you need to read in the default set or not
@@ -53,7 +53,7 @@ def parse_population_data(scenario = 'default', set = 0):
 
 
     # Read in the population metadata dataframe
-    meta = pd.read_feather('simulations/populations/scenario_' + str(scenario) + '/population_' + str(set) + '.ftr')
+    meta = pd.read_feather('simulations/partnerships/scenario_' + str(scenario) + '/population_' + str(set) + '_meta.ftr')
 
 
     # Check that the duration exposed is correct in meta
@@ -162,12 +162,7 @@ def parse_default_parameters():
 # format that the code requires.
 #
 #
-def parse_custom_parameters(i):
-
-
-    # Access the relevent set of parameters
-    parameters = pd.read_csv('simulations/parameters.csv')
-    parameters = parameters.iloc[i,:]
+def parse_custom_parameters(parameters, parameter_no):
 
 
     # Parse parameters controlling infection dynamics and regular clinical treatment
@@ -192,7 +187,8 @@ def parse_custom_parameters(i):
                                 'immunity_mean': [parameters.immune_mean] * 2,
                                 'immunity_var': [parameters.immune_var] * 2,
 
-                                'import_prob': [parameters.import_prob] * 2})
+                                'pop_annual_turnover_rate': [parameters.pop_annual_turnover_rate] * 2,
+                                'prob_import_infectious': [parameters.prob_import_infectious] * 2})
 
 
     # Parse parameters controlling the probability of engaging in different
@@ -269,7 +265,7 @@ def parse_custom_parameters(i):
 
 
     # Combine everything into a dictionary
-    parameters = {'set': 'simulation set ' + str(i),
+    parameters = {'set': 'simulation set ' + str(parameter_no),
                   'infection': infection,
                   'p_anal': p_anal,
                   'p_oral': p_oral,
@@ -292,22 +288,54 @@ def parse_custom_parameters(i):
 #
 # A function to load parameters.
 #
-# Loads the defaults if no file number is specified
+# Set:
+#      default = the baseline set of parameters used during initial testing
+#
+#      calibrated =
 #
 #
-def parse_parameters(set = 'default'):
+def parse_parameters(set = 'default', scenario = 0, parameter_no = 0, run_mode = run_mode):
 
 
     # Work out if you need to read in the default set or not
     if set == 'default':
+
+
         # Read in the default set
         ( print('Parsing default parameter set.\n') if run_mode == 'serial' else [] )
         parameters = parse_default_parameters()
 
-    else:
-        # Read in the numbered set
-        ( print('Parsing simulated parameter set ' + str(set) + '.\n') if run_mode == 'serial' else [] )
-        parameters = parse_custom_parameters(set)
+
+    elif set == 'calibration':
+
+
+        # Read in the calibration parameters
+        parameters = pd.read_csv('simulations/parameters.csv')
+        parameters = parameters.iloc[parameter_no,:]
+
+
+        # Format the parameters
+        ( print('Parsing calibration parameter set ' + str(parameter_no) + '.\n') if run_mode == 'serial' else [] )
+        parameters = parse_custom_parameters(parameters, parameter_no)
+
+
+    elif set == 'calibrated':
+
+
+        # Read in the calibrated parameters
+        parameters = pd.read_csv('simulations/calibrated_scenario_' + str(scenario) + '.csv')
+        parameters = parameters.iloc[parameter_no,:]
+        set_no = int(parameters.set)
+
+
+        # Format the parameters
+        ( print('Parsing calibrated parameter set ' + str(parameter_no) + ' - originally parameter set ' + str(set_no) + '.\n') if run_mode == 'serial' else [] )
+        parameters = parse_custom_parameters(parameters, parameter_no)
+
+
+        # Insert the set number in the inital set
+        parameters.update({'calibration_set': set_no})
+        parameters.update({'calibrated_set': parameter_no})
 
 
     return parameters
@@ -319,12 +347,12 @@ def run_one_parameter_set(parameter_no):
 
     # Run first parameter set
     # ( print('\nRunning scenario 1 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
-    # run_one_simulation(1, parameter_no)
+    run_one_simulation(1, parameter_no)
 
 
     # Run second parameter set
     # ( print('\nRunning scenario 2 - with parameter set ' + str(parameter_no) + '\n===========================================') if run_mode == 'serial' else [] )
-    run_one_simulation(2, parameter_no)
+    # run_one_simulation(2, parameter_no)
 
 
     # Run third parameter set
@@ -335,7 +363,7 @@ def run_one_parameter_set(parameter_no):
 #%% FUN run_one_simulation()
 def run_one_simulation(scenario, parameter_no):
 
-    
+
     # Time code
     t0 = time.time()
 
@@ -351,7 +379,7 @@ def run_one_simulation(scenario, parameter_no):
     # Parse infection parameters
     # Pass this function which numbered parameter set you want to use
     # Will default back to the baseline parameter set
-    inf_parameters = setup.parse_parameters(parameter_no)
+    inf_parameters = setup.parse_parameters('calibration', scenario, parameter_no)
 
 
     # Parse demographic parameters for population
@@ -368,7 +396,7 @@ def run_one_simulation(scenario, parameter_no):
 
 
     # Check to see if this dataset has been run to completion
-    out_dir = 'simulations/output/scenario_' + str(scenario) +'/simulation_' + str(parameter_no)
+    out_dir = 'simulations/calibration/scenario_' + str(scenario) +'/simulation_' + str(parameter_no)
     last_file = out_dir + '/timestep' + str(sim_parameters.partner_burn_in[0] + sim_parameters.simulation_length[0] - 1) + '.ftr'
     if os.path.exists(last_file) == False:
 
@@ -417,22 +445,28 @@ def run_one_simulation(scenario, parameter_no):
         #% SAVE OUTPUT
 
 
-        # Shelve variables
-        ( print('Shelving environment variables.\n') if run_mode == 'serial' else [] )
-        my_shelf = shelve.open(out_dir + '_workspace.out', 'n')
-        for key in dir():
-            try:
-                my_shelf[key] = globals()[key]
-            except:
-                #
-                # __builtins__, my_shelf, and imported modules can not be shelved.
-                #
-                ( print('ERROR shelving: {0}'.format(key)) if run_mode == 'serial' else [] )
-        my_shelf.close()
-        ( print('\nComplete!\n\n\n\n') if run_mode == 'serial' else [] )
+        # Save all environment variables
+        ( print('Save all environment variables.\n') if run_mode == 'serial' else [] )
+        output = {'inf_parameters': inf_parameters,
+                  'last_file': last_file,
+                  'meta': meta,
+                  'out_dir': out_dir,
+                  'parameter_no': parameter_no,
+                  'partner_expire': partner_expire,
+                  'partner_matrix': partner_matrix,
+                  'pop_parameters': pop_parameters,
+                  'population_no': population_no,
+                  'scenario': scenario,
+                  'sim_parameters': sim_parameters,
+                  't': t}
+        out_file = open(out_dir + '/output.pkl', 'wb')
+        pickle.dump(output, out_file)
+        out_file.close()
 
 
     # Print update
     runtime = (time.time() - t0)/60
     ( print('Running parameter set: ' + str(parameter_no) + ' on scenario: ' + str(scenario) + ' with population: ' + str(population_no) + ' - runtime: ' + str(runtime) + ' min') if run_mode == 'parallel' else [] )
+
+
 

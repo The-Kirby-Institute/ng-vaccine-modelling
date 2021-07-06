@@ -84,6 +84,13 @@ def setup_data(scenario = scenario_global, run_mode = 'serial'):
     partners_dist = pd.read_csv("data/calibration_partnership_rates.csv")
 
 
+    # Compute target distributions
+    targetF = age_dist.ave[age_dist.sex == 0].reset_index(drop=True) * (1-sex_dist['pMale'].iloc[0]) * n
+    targetM = age_dist.ave[age_dist.sex == 1].reset_index(drop=True) * sex_dist['pMale'].iloc[0] * n
+    target = {'0': targetF, '1': targetM}
+
+
+
     # Store all population data in a big dictionary
     pop_parameters = {'scenario': scenario,
                       'size': size,
@@ -91,7 +98,8 @@ def setup_data(scenario = scenario_global, run_mode = 'serial'):
                       'sex_dist': sex_dist,
                       'age_dist': age_dist,
                       'orientation_dist': orientation_dist,
-                      'partners_dist': partners_dist}
+                      'partners_dist': partners_dist,
+                      'target': target}
 
 
     # Return the data
@@ -99,26 +107,69 @@ def setup_data(scenario = scenario_global, run_mode = 'serial'):
 
 
 #%% FUN generate_population()
-def generate_population(pop_parameters, n_generate = 'initilise', prop_infected = sim_parameters.init_prob_exposed[0]):
+def generate_population(pop_parameters,
+                        n_generate = 'initilise',
+                        prop_infected = sim_parameters.init_prob_exposed[0],
+                        t = sim_parameters.partner_burn_in[0]):
 
 
-    # Setup demographic data
-    # size = pop_parameters['size']
-    sex_dist = pop_parameters['sex_dist']
-    age_dist = pop_parameters['age_dist']
-    orientation_dist = pop_parameters['orientation_dist']
-    partners_dist = pop_parameters['partners_dist']
-
-
-    # Switch to just generating one new individual if this is an importation event
+    # Set the number of individuals in the population
     n = pop_parameters['n'] if n_generate == 'initilise' else int(n_generate)
 
 
-    #%% Initilise meta data.frame
+    ## INITILISE DATA.FRAME
+    meta_init = initilise_meta(n)
+
+
+    ## SET GENDER
+    meta_init.loc[meta_init.gender < pop_parameters['sex_dist'].pMale.iloc[0], 'gender'] = 1
+    meta_init.loc[meta_init.gender < 1, 'gender'] = 0
+
+
+    ## SET AGE
+    meta_init = initilise_age(meta_init, pop_parameters['age_dist'], n_generate)
+
+
+    ## SET SEXUAL ORIENTATION
+    meta_init = initilise_orientation(meta_init, pop_parameters['orientation_dist'])
+
+
+    ## SET INFECTION RISK
+    meta_init = initilise_risk(meta_init, pop_parameters['partners_dist'])
+
+
+    ## SET INFECTION STATUS
+    meta_init = initilise_infections(meta_init, prop_infected, t)
+
+
+    # End it
+    return meta_init
+
+
+
+#%% FUN initilise_partner_matrix()
+def initilise_partner_matrix(pop_parameters):
+    out = np.zeros((pop_parameters['n'], pop_parameters['n']))
+    return out
+
+
+#%% FUN initilise_partner_durations()
+def initilise_partner_duration(pop_parameters):
+    out =  float("inf") * np.ones((pop_parameters['n'], pop_parameters['n']))
+    return out
+
+
+#%%  HELPER initilise_meta()
+#
+#
+# Function which makes a new version of meta_init
+#
+#
+def initilise_meta(n):
 
 
     # Initilise data.frame containing attributes of the population
-    meta = pd.DataFrame(columns = ["gender",               # Binary 0/1 are they male
+    meta_init = pd.DataFrame(columns = ["gender",               # Binary 0/1 are they male
                                    "age",                  # Age of the individual
                                    "age_group",            # Age group (16-19, 20-24, 25-29, 30-36)
                                    "orientation",          # Sexual orientation
@@ -135,170 +186,264 @@ def generate_population(pop_parameters, n_generate = 'initilise', prop_infected 
                                    "site0_t1",             # The simulation time that they recover at site 0
                                    "site1_t1",             # The simulation time that they recover at site 1
                                    "site2_t1",             # The simulation time that they recover at site 2
+                                   'site0_symptoms',
+                                   'site1_symptoms',
+                                   'site2_symptoms',
                                    "treatment_threshold",  # Threshold in [0,1] indicating when they'll get treatment
-                                   "recovery_time"])       # Simulation time that they get treatment
+                                   "recovery_time",        # Simulation time that they get treatment
+                                   'import_time'])         # Simulation time that they were imported
 
 
     # Set variable types
-    meta.gender.astype("int64")
-    meta.age.astype("float64")
-    meta.age_group.astype("int64")
-    meta.orientation.astype("int64")
-    meta.risk.astype("int64")
-    meta.partner.astype("int64")
-    meta.counter.astype("int64")
-    meta.state.astype("category")
-    meta.site0.astype("int64")
-    meta.site1.astype("int64")
-    meta.site2.astype("int64")
-    meta.site0_t0.astype("float64")
-    meta.site1_t0.astype("float64")
-    meta.site2_t0.astype("float64")
-    meta.site0_t1.astype("float64")
-    meta.site1_t1.astype("float64")
-    meta.site2_t1.astype("float64")
-    meta.treatment_threshold.astype("float64")
-    meta.recovery_time.astype("float64")
+    meta_init.gender.astype("int64")
+    meta_init.age.astype("float64")
+    meta_init.age_group.astype("int64")
+    meta_init.orientation.astype("int64")
+    meta_init.risk.astype("int64")
+    meta_init.partner.astype("int64")
+    meta_init.counter.astype("int64")
+    meta_init.state.astype("category")
+    meta_init.site0.astype("int64")
+    meta_init.site1.astype("int64")
+    meta_init.site2.astype("int64")
+    meta_init.site0_t0.astype("float64")
+    meta_init.site1_t0.astype("float64")
+    meta_init.site2_t0.astype("float64")
+    meta_init.site0_t1.astype("float64")
+    meta_init.site1_t1.astype("float64")
+    meta_init.site2_t1.astype("float64")
+    meta_init.site0_symptoms.astype('bool')
+    meta_init.site1_symptoms.astype('bool')
+    meta_init.site2_symptoms.astype('bool')
+    meta_init.treatment_threshold.astype("float64")
+    meta_init.recovery_time.astype("float64")
+    meta_init.import_time.astype("float64")
 
 
-    # Set default values for the counter columns used for diagnostics
-    meta.partner = n * [-1]
-    meta.counter = n * [0]
+    # Set default values
+    meta_init.loc[:, 'gender'] = np.random.random(n)
+    meta_init.loc[:, 'age'] = np.random.random(n)
+    meta_init.loc[:, 'age_group'] = -1
+    meta_init.loc[:, 'orientation'] = np.random.random(n)
+    meta_init.loc[:, 'risk'] = np.random.random(n)
+    meta_init.loc[:, 'partner'] = -1
+    meta_init.loc[:, 'counter'] = 0
+    meta_init.loc[:, 'state'] = 'S'
+    meta_init.loc[:, 'site0'] = 0
+    meta_init.loc[:, 'site1'] = 0
+    meta_init.loc[:, 'site2'] = 0
+    meta_init.loc[:, 'site0_t0'] = float("inf")
+    meta_init.loc[:, 'site1_t0'] = float("inf")
+    meta_init.loc[:, 'site2_t0'] = float("inf")
+    meta_init.loc[:, 'site0_t1'] = float("inf")
+    meta_init.loc[:, 'site1_t1'] = float("inf")
+    meta_init.loc[:, 'site2_t1'] = float("inf")
+    meta_init.loc[:, 'site0_symptoms'] = False
+    meta_init.loc[:, 'site1_symptoms'] = False
+    meta_init.loc[:, 'site2_symptoms'] = False
+    meta_init.loc[:, 'treatment_threshold'] = np.random.random(n)
+    meta_init.loc[:, 'recovery_time'] = float("inf")
+    meta_init.loc[:, 'import_time'] = 0
 
 
-    #%% Set age and gender attributes
+    return meta_init
 
 
-    # Gender
-    meta.loc[:,'gender'] = np.random.random(n)
-    meta.loc[meta.gender < sex_dist.pMale.iloc[0], 'gender'] = 1
-    meta.loc[meta.gender < 1, 'gender'] = 0
+#%% HELPER initilise_age()
+#
+#
+# Sets the ages
+#
+#
+def initilise_age(meta_init, age_dist, n_generate):
 
 
-    # Simulate random numbers for age
-    meta.loc[:, 'age'] = np.random.random(n)
+    # Female 16-19
+    who = ((meta_init.gender == 0) & (meta_init.age < age_dist.cdf.iloc[0]))
+    meta_init.loc[who, 'age'] = 16 + 4 * np.random.random(sum(who))
 
 
-    # Convert random numbers to age
-    for i in range(0, n):
+    # Female 20-24
+    who = ((meta_init.gender == 0) & (meta_init.age < age_dist.cdf.iloc[1]))
+    meta_init.loc[who, 'age'] = 20 + 5 * np.random.random(sum(who))
 
 
-        # Work out which age group they're in
-        group = np.min(np.where((age_dist.sex == meta.gender[i]) & (age_dist.cdf > meta.age[i])))
+    # Female 25-29
+    who = ((meta_init.gender == 0) & (meta_init.age < age_dist.cdf.iloc[2]))
+    meta_init.loc[who, 'age'] = 25 + 5 * np.random.random(sum(who))
 
 
-        # Now choose their age
-        meta.loc[i, 'age'] = age_dist.age_lower.iloc[group] + (age_dist.age_upper.iloc[group] - age_dist.age_lower.iloc[group]) * np.random.random(1)
+    # Female 30-34
+    who = ((meta_init.gender == 0) & (meta_init.age < age_dist.cdf.iloc[3]))
+    meta_init.loc[who, 'age'] = 30 + 5 * np.random.random(sum(who))
 
 
-        # Set their age group
-        meta.loc[i, 'age_group'] = int((age_dist.age_upper.iloc[group] - 19)/5)
+    # Female 35
+    who = ((meta_init.gender == 0) & (meta_init.age < age_dist.cdf.iloc[4]))
+    meta_init.loc[who, 'age'] = 35 + np.random.random(sum(who))
 
 
-    # Just check to make sure that there's somebody in the last age group
-    # when generating a full sized dataset
+    # Male 16-19
+    who = ((meta_init.gender == 1) & (meta_init.age < age_dist.cdf.iloc[5]))
+    meta_init.loc[who, 'age'] = 16 + 4 * np.random.random(sum(who))
+
+
+    # Male 20-24
+    who = ((meta_init.gender == 1) & (meta_init.age < age_dist.cdf.iloc[6]))
+    meta_init.loc[who, 'age'] = 20 + 5 * np.random.random(sum(who))
+
+
+    # Male 25-29
+    who = ((meta_init.gender == 1) & (meta_init.age < age_dist.cdf.iloc[7]))
+    meta_init.loc[who, 'age'] = 25 + 5 * np.random.random(sum(who))
+
+
+    # Male 30-34
+    who = ((meta_init.gender == 1) & (meta_init.age < age_dist.cdf.iloc[8]))
+    meta_init.loc[who, 'age'] = 30 + 5 * np.random.random(sum(who))
+
+
+    # Male 35
+    who = ((meta_init.gender == 1) & (meta_init.age < age_dist.cdf.iloc[9]))
+    meta_init.loc[who, 'age'] = 35 + np.random.random(sum(who))
+
+
+    # Age group
+    meta_init.age_group = np.floor((meta_init.age - 15)/5)
+
+
+    # Upon initilisation, make sure there's somebody in each age group
     if n_generate == 'initilise':
-        n_oldest = sum(meta.age_group == 4)
+        n_oldest = sum(meta_init.age_group == 4)
         if n_oldest == 0:
 
 
             # If not, pick somebody at random and put them into that age group
             i = round(n * np.random.random(1)[0])
-            meta.loc[i, 'age'] = 35.5
-            meta.loc[i, 'age_group'] = 4
+            meta_init.loc[i, 'age'] = 35.5
+            meta_init.loc[i, 'age_group'] = 4
 
 
     # Lump the 4th age group (35-39) in with the 3rd age group (30-34) anyway
-    meta.loc[meta.age_group == 4, 'age_group'] = 3
+    meta_init.loc[meta_init.age_group == 4, 'age_group'] = 3
 
 
-    #%% Set sexual orientation
+    return meta_init
 
 
-    # Simulate random numbers for orientation
-    meta.loc[:, 'orientation'] = np.random.random(n)
+#%% HELPER initilise_orientation()
+#
+#
+# Sets the orientation in meta_init
+#
+#
+def initilise_orientation(meta_init, orientation_dist):
 
 
-    # Set orientation
-    for i in range(0, n):
+    # Individuals ages 16-19
+    meta_init.loc[(meta_init.age_group == 0) & (meta_init.orientation <= orientation_dist.hetero.iloc[0]), 'orientation'] = 0
+    meta_init.loc[(meta_init.age_group == 0) & (meta_init.orientation <= orientation_dist.homo.iloc[0]) & (meta_init.orientation != 0), 'orientation'] = 1
+    meta_init.loc[(meta_init.age_group == 0) & (meta_init.orientation <= orientation_dist.bi.iloc[0]) & (meta_init.orientation != 0) & (meta_init.orientation != 1), 'orientation'] = 2
 
 
-        # Work out their orientation
-        meta.loc[i, 'orientation'] = np.min(np.where(orientation_dist.loc[meta.age_group.iloc[i], ['hetero', 'homo', 'bi']].to_numpy() > meta.orientation[i]))
+    # Individuals ages 20-24
+    meta_init.loc[(meta_init.age_group == 1) & (meta_init.orientation <= orientation_dist.hetero.iloc[1]), 'orientation'] = 0
+    meta_init.loc[(meta_init.age_group == 1) & (meta_init.orientation <= orientation_dist.homo.iloc[1]) & (meta_init.orientation != 0), 'orientation'] = 1
+    meta_init.loc[(meta_init.age_group == 1) & (meta_init.orientation <= orientation_dist.bi.iloc[1]) & (meta_init.orientation != 0) & (meta_init.orientation != 1), 'orientation'] = 2
 
 
-    #%% Set infection-risk
+    # Individuals aged 25 and older
+    meta_init.loc[(meta_init.age_group > 1) & (meta_init.orientation <= orientation_dist.hetero.iloc[2]), 'orientation'] = 0
+    meta_init.loc[(meta_init.age_group > 1) & (meta_init.orientation <= orientation_dist.homo.iloc[2]) & (meta_init.orientation != 0), 'orientation'] = 1
+    meta_init.loc[(meta_init.age_group > 1) & (meta_init.orientation <= orientation_dist.bi.iloc[2]) & (meta_init.orientation != 0) & (meta_init.orientation != 1), 'orientation'] = 2
 
 
-    # Simulate some random numbers
-    meta.loc[:, 'risk'] = np.random.random(n)
+    return meta_init
 
 
-    # Set orientation
-    for i in range(0, n):
+#%% HELPER initilise_risk()
+#
+#
+# Initilises risk
+#
+#
+def initilise_risk(meta_init, partners_dist):
 
 
-        # Work out their orientation
-        # meta.loc[i, 'risk'] = int(meta.risk[i] < partners_dist.loc[meta.age_group.iloc[i], ['more']].to_numpy())
-        meta.loc[i, 'risk'] = int(meta.risk[i] < partners_dist.iloc[3, meta.age_group.iloc[i]])
+    # Individuals aged 16-19
+    meta_init.loc[(meta_init.age_group == 0) & (meta_init.risk > partners_dist['16-19'].iloc[3]), 'risk'] = 0
+    meta_init.loc[(meta_init.age_group == 0) & (meta_init.risk > 0), 'risk'] = 1
 
 
-
-    #%% Initilise infections
-
-
-    # Set default values
-    meta.state = n * ["S"]
-    meta.site0 = n * [0]
-    meta.site1 = n * [0]
-    meta.site2 = n * [0]
-    meta.site0_t0 = n * [float("inf")]
-    meta.site1_t0 = n * [float("inf")]
-    meta.site2_t0 = n * [float("inf")]
-    meta.site0_t1 = n * [float("inf")]
-    meta.site1_t1 = n * [float("inf")]
-    meta.site2_t1 = n * [float("inf")]
-    meta.treatment_threshold = np.random.random(n)
-    meta.recovery_time = n * [float("inf")]
+    # Individuals aged 20-24
+    meta_init.loc[(meta_init.age_group == 1) & (meta_init.risk > partners_dist['20-24'].iloc[3]), 'risk'] = 0
+    meta_init.loc[(meta_init.age_group == 1) & (meta_init.risk > 0), 'risk'] = 1
 
 
-    # Seed some infections
-    for i in range(0, n):
+    # Individuals aged over 25
+    meta_init.loc[(meta_init.age_group > 1) & (meta_init.risk > partners_dist['25-29'].iloc[3]), 'risk'] = 0
+    meta_init.loc[(meta_init.age_group > 1) & (meta_init.risk > 0), 'risk'] = 1
 
 
-        # Set infection rate to 90% of the population
-        if np.random.random() < prop_infected:
+    return meta_init
 
 
-            # Set as exposed
-            meta.at[i, "state"] = "E"
+#%% HELPER initilise_infections()
+#
+#
+#
+#
+#
+def initilise_infections(meta_init, prop_infected, t):
 
 
-            # Choose one or more site to infect
-            u = np.cumsum(np.random.random(3))
-            u = np.min(np.where(u/u[2] > np.random.random()))
-            meta.at[i, "site" + str(u) + "_t0"] = sim_parameters.partner_burn_in[0] + sim_parameters.init_duration_exposed[0] * np.random.random(1)
+    # Choose people at random to infect
+    infected = meta_init.treatment_threshold < prop_infected
+    meta_init.loc[infected, 'state'] = 'E'
 
 
-    # End it
-    return meta
+    # Choose one site of infection for these individuals
+    site = np.random.choice([0, 1, 2], len(meta_init))
+    site0 = infected & (site == 0)
+    site1 = infected & (site == 1)
+    site2 = infected & (site == 2)
 
 
-
-#%% FUN initilise_partner_matrix()
-def initilise_partner_matrix(pop_parameters):
-    out = np.zeros((pop_parameters['n'], pop_parameters['n']))
-    return out
-
-
-#%% FUN initilise_partner_durations()
-def initilise_partner_duration(pop_parameters):
-    out =  float("inf") * np.ones((pop_parameters['n'], pop_parameters['n']))
-    return out
+    # Set infection status
+    meta_init.loc[site0, 'site0'] = 1
+    meta_init.loc[site1, 'site1'] = 1
+    meta_init.loc[site2, 'site2'] = 1
 
 
-#%% FUN graph_population()
-def graph_population(pop_parameters, meta, save_dir):
+    # Set the time of infection to the end of the burn in period
+    meta_init.loc[site0, 'site0_t0'] = t
+    meta_init.loc[site1, 'site1_t0'] = t
+    meta_init.loc[site2, 'site2_t0'] = t
+
+
+    # Set the duration of infection
+    latent = sim_parameters.init_duration_exposed[0] * np.random.random(len(meta_init))
+    meta_init.loc[site0, 'site0_t1'] = t + latent[site0]
+    meta_init.loc[site1, 'site1_t1'] = t + latent[site1]
+    meta_init.loc[site2, 'site2_t1'] = t + latent[site2]
+
+
+    # Set symptomatic status
+    meta_init.loc[site0 & (meta_init.treatment_threshold[site0] < sim_parameters.init_prob_exposed[0]), 'site0_symptoms'] = True
+    meta_init.loc[site1 & (meta_init.treatment_threshold[site1] < sim_parameters.init_prob_exposed[0]), 'site1_symptoms'] = True
+    meta_init.loc[site2 & (meta_init.treatment_threshold[site2] < sim_parameters.init_prob_exposed[0]), 'site2_symptoms'] = True
+
+
+    return meta_init
+
+
+#%% GRAPH graph_population()
+#
+#
+#
+#
+#
+def graph_population(pop_parameters, meta_init, save_dir):
 
 
     # Setup demographic data
@@ -309,11 +454,11 @@ def graph_population(pop_parameters, meta, save_dir):
     partners_dist = pop_parameters['partners_dist']
 
 
-    #%% Sex
+    #% Sex
 
 
     # Sex distribution
-    simulated = [np.sum( (meta.gender == 1) ), np.sum( (meta.gender == 0) )]
+    simulated = [np.sum( (meta_init.gender == 1) ), np.sum( (meta_init.gender == 0) )]
     target = [n * sex_dist.pMale.iloc[0], n * (1 - sex_dist.pMale.iloc[0])]
     labels = ['Males', 'Females']
     x = np.arange(len(labels))
@@ -333,12 +478,12 @@ def graph_population(pop_parameters, meta, save_dir):
     #plt.show()
 
 
-    #%% Sexual orientation by age group
+    #% Sexual orientation by age group
 
 
     # Setup the simulated data
-    meta.loc[meta.age > 35, 'age_group'] = 4
-    counted = meta.pivot_table(index='age_group', columns='orientation', fill_value=0, aggfunc='count')['age'].unstack()
+    meta_init.loc[meta_init.age > 35, 'age_group'] = 4
+    counted = meta_init.pivot_table(index='age_group', columns='orientation', fill_value=0, aggfunc='count')['age'].unstack()
     hetero = counted[0]
     homo = counted[1]
     bi = counted[2]
@@ -379,16 +524,16 @@ def graph_population(pop_parameters, meta, save_dir):
     #plt.show()
 
 
-    #%% Risk level by age group
+    #% Risk level by age group
 
-    counted = meta.pivot_table(index='age_group', columns='risk', fill_value=0, aggfunc='count')['age'].unstack()
+    counted = meta_init.pivot_table(index='age_group', columns='risk', fill_value=0, aggfunc='count')['age'].unstack()
     low = counted[0]
     high = counted[1]
 
 
     # Setup the simulated data
-    #low = meta.loc[meta.risk == 0, :]. groupby('age_group')['age_group'].count()
-    #high = meta.loc[meta.risk == 1, :]. groupby('age_group')['age_group'].count()
+    #low = meta_init.loc[meta_init.risk == 0, :]. groupby('age_group')['age_group'].count()
+    #high = meta_init.loc[meta_init.risk == 1, :]. groupby('age_group')['age_group'].count()
     labels = ['[16, 20)', '[20, 25)', '[25, 30)', '[30, 35)', '[35, 36)']
     x = np.arange(len(labels))
 
@@ -428,15 +573,3 @@ def graph_population(pop_parameters, meta, save_dir):
     plt.savefig(save_dir + '_age_and_risk.png', bbox_inches='tight')
     plt.close()
     #plt.show()
-
-
-
-
-
-
-
-
-
-
-
-

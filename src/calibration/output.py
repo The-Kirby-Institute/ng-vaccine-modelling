@@ -57,7 +57,7 @@ def extract_prevalence(sim):
 
 
                     # Read in meta
-                    meta = pd.read_feather('simulations/output/scenario_' + str(scenario) + '/simulation_' + str(sim) + '/timestep' + str(param['partner_burn_in'][0] + t) + '.ftr')
+                    meta = pd.read_feather('simulations/calibration/scenario_' + str(scenario) + '/simulation_' + str(sim) + '/timestep' + str(param['partner_burn_in'][0] + t) + '.ftr')
 
 
                     # Compute prevalence
@@ -108,8 +108,8 @@ def run_standard_checks(sim):
 
 
                 # Preallocate for output
-                file_name = 'simulations/output/scenario_' + str(scenario) + '/simulation_'
-                yt = np.zeros((param['simulation_length'][0], 4))
+                file_name = 'simulations/calibration/scenario_' + str(scenario) + '/simulation_'
+                yt = np.zeros((param['simulation_length'][0], 5))
                 popt = np.zeros((param['simulation_length'][0], 4))
                 part = np.zeros((param['simulation_length'][0], 2))
                 inft = np.zeros((param['simulation_length'][0], 8))
@@ -126,9 +126,10 @@ def run_standard_checks(sim):
 
                     # Compute the number in each infectious state
                     yt[t,:] = [sum(meta.state == 'S'),
-                            sum( (meta.state == 'I') & ( (meta.site0_t0 > t) & (meta.site1_t0 > t) & (meta.site2_t0 > t) ) ),
-                            sum( (meta.state == 'I') & ( (meta.site0_t0 < t) | (meta.site1_t0 < t) | (meta.site2_t0 < t) ) ),
-                            sum(meta.state == 'R')]
+                               sum(meta.state == 'E'),
+                               sum(meta.state == 'I'),
+                               sum(meta.state == 'R'),
+                               sum(meta.state == 'T')]
 
 
                     # Compute the number in each age group
@@ -191,6 +192,7 @@ def make_graphs(scenario, sim, yt, popt, part, inft, prvt):
     plt.plot(tt, yt[:,1], label = 'E')
     plt.plot(tt, yt[:,2], label = 'I')
     plt.plot(tt, yt[:,3], label = 'R')
+    plt.plot(tt, yt[:,4], label = 'T')
     plt.title('Aggregate Infectious State - Parameter Set ' + str(sim))
     plt.legend()
     plt.savefig(file_name + '_aggregate_infections.png')
@@ -226,25 +228,25 @@ def make_graphs(scenario, sim, yt, popt, part, inft, prvt):
 
 
     # make first pannel
-    axs[0].plot(tt, inft[:,1] + inft[:,4] + inft[:,6] + inft[:,7], label = 'Site 0')
-    axs[0].plot(tt, inft[:,2] + inft[:,4] + inft[:,5] + inft[:,7], label = 'Site 1')
-    axs[0].plot(tt, inft[:,3] + inft[:,5] + inft[:,6] + inft[:,7], label = 'Site 2')
+    axs[0].plot(tt, inft[:,1] + inft[:,4] + inft[:,6] + inft[:,7], label = 'Rectal')
+    axs[0].plot(tt, inft[:,2] + inft[:,4] + inft[:,5] + inft[:,7], label = 'Urethral')
+    axs[0].plot(tt, inft[:,3] + inft[:,5] + inft[:,6] + inft[:,7], label = 'Pharyngeal')
     axs[0].legend()
     axs[0].set_title('Infections Including Each Site')
 
 
     # make second pannel
-    axs[1].plot(tt, inft[:,1], label = 'Site 0')
-    axs[1].plot(tt, inft[:,2], label = 'Site 1')
-    axs[1].plot(tt, inft[:,3], label = 'Site 2')
+    axs[1].plot(tt, inft[:,1], label = 'Rectal')
+    axs[1].plot(tt, inft[:,2], label = 'Urethral')
+    axs[1].plot(tt, inft[:,3], label = 'Pharyngeal')
     axs[1].legend()
     axs[1].set_title('Infections at Just One Site')
 
 
     # Make third pannel
-    axs[2].plot(tt, inft[:,4], label = 'Sites 0 and 1')
-    axs[2].plot(tt, inft[:,5], label = 'Sites 1 and 2')
-    axs[2].plot(tt, inft[:,6], label = 'Sites 0 and 2')
+    axs[2].plot(tt, inft[:,4], label = 'Sites Rec and Ure')
+    axs[2].plot(tt, inft[:,5], label = 'Sites Ure and Pha')
+    axs[2].plot(tt, inft[:,6], label = 'Sites Rec and Pha')
     axs[2].plot(tt, inft[:,7], label = 'All sites')
     axs[2].legend()
     axs[2].set_title('Infections at Multiple Sites')
@@ -337,7 +339,7 @@ def make_graphs(scenario, sim, yt, popt, part, inft, prvt):
 #
 #
 def check_for_output_data(scenario, sim):
-    return os.path.exists('simulations/output/scenario_' + str(scenario) + '/simulation_' + str(sim) + '/timestep' + str(param['partner_burn_in'][0] + param['simulation_length'][0] - 1) + '.ftr')
+    return os.path.exists('simulations/calibration/scenario_' + str(scenario) + '/simulation_' + str(sim) + '/timestep' + str(param['partner_burn_in'][0] + param['simulation_length'][0] - 1) + '.ftr')
 
 
 #%% FUN check_completion()

@@ -30,6 +30,10 @@ import os
 import glob
 
 
+# Parallel processing
+from multiprocessing import Pool
+
+
 # Load modules for simulation script
 import src.demographic.generate_population as pop
 import src.partners.partners as prt
@@ -46,18 +50,21 @@ import src.partners.summary_stats as pstat
 param = pd.read_csv("data/param.csv")
 
 
+# How many cores to run on
+n_cores = 10
+
+
 #%% SETUP Script parameters
 
 
 # Which things should be generated here
 generate_populations = True
-burn_in_partnerships = True
-track_partnership_rates = True
+burn_in_partnerships = False
+track_partnership_rates = False
 generate_parameters = False
 
-
 # Set whether or not you want to overwrite the existing data
-recovery_mode = True
+recovery_mode = False
 
 
 #%% RUN Generate Populations
@@ -72,7 +79,7 @@ if generate_populations:
 
 
     # Purge the directory if not in recovery mode
-    if recovery_mode == False:
+    if (__name__ == '__main__') & (recovery_mode == False):
 
 
         # Identify all existing population data
@@ -87,16 +94,17 @@ if generate_populations:
             os.remove(f)
 
 
-    # Iterate over the scenario number
-    for scenario in [1, 2, 3]:
+    # Define function for generating the requested population data
+    def generate_population_fun(i):
+        print('Generating population ' + str(i), flush=True)
 
 
-        # Parse demographic parameters for population
-        pop_parameters = pop.setup_data(scenario)
+        # Iterate over the scenario number
+        for scenario in [1, 2, 3]:
 
 
-        # Iterate over the simulation number
-        for i in tqdm.tqdm(range(0, param.n_populations[0])):
+            # Parse demographic parameters for population
+            pop_parameters = pop.setup_data(scenario, 'parallel')
 
 
             # Check if the file is there already or not
@@ -116,6 +124,17 @@ if generate_populations:
                 pop.graph_population(pop_parameters, meta, file_name)
 
 
+    # Define function for handling the parallel pool
+    def pool_handler():
+        p = Pool(n_cores)
+        p.map(generate_population_fun, range(0, param.n_populations[0]))
+
+
+    # Run generate_population() function in parallel
+    if __name__ == '__main__':
+        pool_handler()
+
+
 #%% RUN Burn in Partnership Networks
 
 
@@ -124,7 +143,7 @@ if burn_in_partnerships:
 
 
     # Purge the directory if not in recovery mode
-    if recovery_mode == False:
+    if (__name__ == '__main__') & (recovery_mode == False):
 
 
         # Identify all existing partnership data
@@ -139,17 +158,20 @@ if burn_in_partnerships:
             os.remove(f)
 
 
-    # Iterate over the scenario number
-    for scenario in [1, 2, 3]:
+    # Define function for burning in the population
+    def burn_in_partnerships_fun(i):
 
 
-        # Parse demographic parameters for population
-        pop_parameters = pop.setup_data(scenario)
+        # Iterate over the scenario number
+        for scenario in [1, 2, 3]:
 
 
-        # Iterate over the simulation number
-        for i in range(0, param.n_populations[0]):
-            print('Burn in for population ' + str(i) + ' of scenario ' + str(scenario) + '\n', flush = True)
+            # Parse demographic parameters for population
+            pop_parameters = pop.setup_data(scenario, 'parallel')
+
+
+            # Iterate over the simulation number
+            print('Burn in for population ' + str(i) + ' of scenario ' + str(scenario))
 
 
             # Skip file if it is already there
@@ -167,7 +189,7 @@ if burn_in_partnerships:
 
 
                 # Run Partnership Dynamics
-                for t in tqdm.tqdm(range(0, n_days)):
+                for t in range(0, n_days):
                     meta, partner_matrix, partner_expire, d0ti, d1ti, d2ti, d3ti = prt.new_partnership(meta, partner_matrix, partner_expire, t)
                     meta, partner_matrix, partner_expire = prt.old_partnerships(meta, partner_matrix, partner_expire, t)
                     if track_partnership_rates:
@@ -175,7 +197,7 @@ if burn_in_partnerships:
 
 
                 # Store data for later
-                meta.to_feather(file_name_pop)
+                meta.to_feather(save_dir + '_meta.ftr')
                 np.save(save_dir + '_matrix.npy', partner_matrix)
                 np.save(save_dir + '_expire.npy', partner_expire)
 
@@ -185,19 +207,36 @@ if burn_in_partnerships:
                     pstat.graph_partnership_numbers(meta, n_days, p0ht, p0lt, p1ht, p1lt, p2ht, p2lt, p3ht, p3lt, save_dir)
 
 
+    # Define function for handling the parallel pool
+    def pool_handler():
+        p = Pool(n_cores)
+        p.map(burn_in_partnerships_fun, range(0, param.n_populations[0]))
+
+
+    # Run generate_population() function in parallel
+    if __name__ == '__main__':
+        pool_handler()
+
+
 #%% RUN Generate parameters
 
 
 # Only run if asked to
-if generate_parameters == True:
+if (__name__ == '__main__') & (generate_parameters == True):
 
 
     # How many parameter sets to simulate
     n_sim = param['n_parameter_sets'][0]
 
 
-    # Import probability
-    import_prob = np.random.beta(2, 40, n_sim)
+    # Import person rate
+    # This is defiend as the expected number of days it'll take the population to revert to it's target population
+    pop_turnover_rate_per_yr = np.random.beta(2, 10, n_sim)
+    plt.hist(pop_turnover_rate_per_yr)
+
+
+    # Probability that an imported individual is infectious
+    import_prob = np.random.beta(10, 40, n_sim)
     # plt.hist(import_prob)
 
 
@@ -207,16 +246,17 @@ if generate_parameters == True:
 
 
     # Duration of natural infection
-    mean_rectal = 30
+    #https://pubmed.ncbi.nlm.nih.gov/26886136/#:~:text=Pharyngeal%20gonorrhoea%20(114%2D138%20days,days)%20compared%20with%20gonorrhoea%20infection.
+    mean_rectal = 346
     var_rectal = 1
     symptoms_rectal = np.random.random(n_sim)
-    mean_ural_male = 30
+    mean_ural_male = 346
     var_ural_male = 1
     symptoms_ural_male = np.random.random(n_sim)
-    mean_ural_female = 30
+    mean_ural_female = 346
     var_ural_female = 1
     symptoms_ural_female = np.random.random(n_sim)
-    mean_phar = 90
+    mean_phar = 120
     var_phar = 1
     symptoms_phar = np.random.random(n_sim)
 
@@ -247,20 +287,20 @@ if generate_parameters == True:
 
 
     # Parameters regarding the likelihood of seeking treatment
-    treat_mean = np.round(8 * np.random.beta(10, 5, n_sim))
+    treat_mean = (21 * np.random.beta(10, 5, n_sim))
     # plt.hist(treat_mean)
     treat_var = 2.2
 
 
     # Parameters around immunity from treatment
-    immune_mean	= np.round(14 * np.random.beta(10, 5, n_sim))
+    immune_mean	= 7 * np.random.beta(10, 5, n_sim)
     # plt.hist(immune_mean)
     immune_var = 2
 
 
     # Construct parameter set
-    sim_parameters = pd.DataFrame({
-                                    'import_prob': import_prob,
+    sim_parameters = pd.DataFrame({ 'pop_annual_turnover_rate': pop_turnover_rate_per_yr,
+                                    'prob_import_infectious': import_prob,
                                     'latent_period': latent_period,
                                     'mean_rectal': mean_rectal,
                                     'var_rectal': var_rectal,

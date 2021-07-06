@@ -17,17 +17,17 @@ out.check_completion()
 
 
 # Set the list of simulations to consider
-sim = list(range(0, 999))
+sim = list(range(0, 1000))
 
 
 # Define function for handling the parallel pool
 def pool_handler_prevalence():
-    p = Pool(12)
+    p = Pool(6)
     p.map(out.extract_prevalence, sim)
 
 
 def pool_handler_checks():
-    p = Pool(12)
+    p = Pool(6)
     p.map(out.run_standard_checks, sim)
 
 

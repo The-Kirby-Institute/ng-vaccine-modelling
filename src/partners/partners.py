@@ -241,7 +241,7 @@ def find_partner(meta, partner_matrix, bachelor_index):
         # Could be a heterosexual or a bisexual but must be of the opposite gender
         partners = meta[(meta["orientation"] != 1) &\
                         (meta["gender"] != bachelor["gender"]) &\
-                        (partner_matrix[bachelor_index,:]==0) &\
+                        (partner_matrix[bachelor_index, 0:len(meta)]==0) &\
                         (meta.index != bachelor_index)]
 
 
@@ -250,7 +250,7 @@ def find_partner(meta, partner_matrix, bachelor_index):
         # Could be a homosexual or a bisexual of the same gender
         partners = meta[(meta["orientation"] != 0) &\
                         (meta["gender"] == bachelor["gender"]) &\
-                        (partner_matrix[bachelor_index,:]==0) &\
+                        (partner_matrix[bachelor_index,0:len(meta)]==0) &\
                         (meta.index != bachelor_index)]
 
 
@@ -259,7 +259,7 @@ def find_partner(meta, partner_matrix, bachelor_index):
         # Could be anyone but a hetero of the same sex or a homo of the other sex
         partners = meta[~((meta["orientation"] == 0) & (meta["gender"] == bachelor["gender"])) &\
                         ~((meta["orientation"] == 1) & (meta["gender"] != bachelor["gender"])) &\
-                        (partner_matrix[bachelor_index,:]==0) &\
+                        (partner_matrix[bachelor_index,0:len(meta)]==0) &\
                         (meta.index != bachelor_index)]
 
 
